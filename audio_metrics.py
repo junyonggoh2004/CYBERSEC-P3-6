@@ -22,9 +22,15 @@ SNR_REFERENCE_SIGNAL = "signal"          # cover's own mean power: a real SNR
 SNR_REFERENCE_FULL_SCALE = "full_scale"  # silent cover: full scale substituted
 SNR_REFERENCE_NONE = "identical"         # no noise at all, SNR is +inf
 
-# Full-scale amplitude for 16-bit PCM, used as the stand-in reference for a
-# silent cover.
-_INT16_FULL_SCALE = 32768.0
+
+def _full_scale(samples: np.ndarray) -> float:
+    """Full-scale amplitude for the array's own integer dtype.
+
+    Used as the stand-in reference for a silent cover. Derived from the dtype
+    rather than assumed, so a 32-bit carrier is not measured against a 16-bit
+    reference. int16 gives 32768.0, as before.
+    """
+    return float(np.iinfo(samples.dtype).max) + 1.0
 
 
 class MetricsError(ValueError):
@@ -105,7 +111,7 @@ def snr_db_with_reference(cover: np.ndarray, stego: np.ndarray) -> tuple[float, 
     signal_power = float(np.mean(ref ** 2))
     if signal_power == 0.0:
         return (
-            float(10.0 * np.log10(_INT16_FULL_SCALE ** 2 / noise_power)),
+            float(10.0 * np.log10(_full_scale(cover) ** 2 / noise_power)),
             SNR_REFERENCE_FULL_SCALE,
         )
 

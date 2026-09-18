@@ -81,6 +81,20 @@ def test_silent_cover_is_labelled_as_not_a_true_snr():
     assert "not a true SNR" in display
 
 
+def test_silent_cover_reference_follows_the_sample_dtype():
+    # The stand-in reference is full scale for the carrier's own dtype, so a
+    # 32-bit cover is not measured against a 16-bit reference. Same noise, wider
+    # dtype, so the int32 figure must be the larger of the two.
+    noise = [1, 0, 0, 0]
+    snr16 = m.snr_db(np.zeros(4, dtype=np.int16), np.array(noise, dtype=np.int16))
+    snr32 = m.snr_db(np.zeros(4, dtype=np.int32), np.array(noise, dtype=np.int32))
+
+    # int16 result is unchanged: full scale 32768, noise power 0.25.
+    assert snr16 == pytest.approx(10.0 * np.log10(32768.0 ** 2 / 0.25), abs=1e-9)
+    assert snr32 == pytest.approx(10.0 * np.log10(2147483648.0 ** 2 / 0.25), abs=1e-9)
+    assert snr32 > snr16
+
+
 def test_identical_signals_are_labelled_rather_than_printed_as_a_number():
     x = np.array([1, 2, 3], dtype=np.int16)
     result = m.compare(x, x.copy())
