@@ -6,6 +6,19 @@ A single-page, drag-and-drop web app (Flask backend + vanilla HTML/CSS/JS fronte
 
 ## What it does
 
+- **PNG steganalysis (Kim)**: independent chi-square pairs-of-values and RS group
+  analysis, full-image/window statistics, cautious combined indication, and JSON
+  report export. Open the **Steganalysis** section. See
+  [Steganalysis implementation guide](docs/STEGANALYSIS_GUIDE.md) for formulas, limitations,
+  tests and demo steps, and [evaluation results](evidence/steganalysis/RESULTS.md)
+  for the 100-case natural-image experiment. Statistics do not change verification
+  verdicts. Detector thresholds remain provisional.
+
+Run Kim's tests with `python -m pip install -r requirements-dev.txt` followed by
+`python -m pytest tests/test_steganalysis.py -q`. Reproduce the evaluation with
+`python scripts/evaluate_steganalysis.py`. Exact tested dependency versions are
+recorded in `requirements-tested.txt`.
+
 - **Embed (encode)**: drop a cover file — PNG image, 16/32-bit PCM WAV, or a video file (MP4/MKV/MOV/AVI/WebM) with an audio track — pick a payload (typed text, any file, or an audio/MP3 file), pick how many LSBs to use (1–8) and where to start embedding, and produce a signed stego file.
 - **Extract (decode)**: drop a received stego file, supply the same LSB depth / start-location secret and a public key, and get back a clear verdict: **Authentic, Tampered, Signature Invalid, Payload Missing, Wrong Start Location,** or **Cannot Verify** — plus the recovered payload.
 - **One drop zone, any file**: you don't pick "image" or "audio" or "video" first — drop (or click-to-browse) any supported cover/stego file into the single drop zone and the app detects the type from the file itself and switches to the matching tab automatically. The tabs still work for manually forcing a type if you want to.

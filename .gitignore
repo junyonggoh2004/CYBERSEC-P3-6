@@ -4,4 +4,6 @@ __pycache__/
 venv/
 backend/keys/private_key.pem
 test_evidence/
-samples/
+samples/*
+!samples/steganalysis/
+.pytest_cache/

@@ -1,0 +1,22 @@
+[
+  {
+    "file": "astronaut.png",
+    "url": "https://raw.githubusercontent.com/scikit-image/scikit-image/v0.18.3/skimage/data/astronaut.png",
+    "sha256": "88431cd9653ccd539741b555fb0a46b61558b301d4110412b5bc28b5e3ea6cb5"
+  },
+  {
+    "file": "chelsea.png",
+    "url": "https://raw.githubusercontent.com/scikit-image/scikit-image/v0.18.3/skimage/data/chelsea.png",
+    "sha256": "596aa1e7cb875eb79f437e310381d26b338a81c2da23439704a73c4651e8c4bb"
+  },
+  {
+    "file": "clock_motion.png",
+    "url": "https://raw.githubusercontent.com/scikit-image/scikit-image/v0.18.3/skimage/data/clock_motion.png",
+    "sha256": "f029226b28b642e80113d86622e9b215ee067a0966feaf5e60604a1e05733955"
+  },
+  {
+    "file": "coffee.png",
+    "url": "https://raw.githubusercontent.com/scikit-image/scikit-image/v0.18.3/skimage/data/coffee.png",
+    "sha256": "cc02f8ca188b167c775a7101b5d767d1e71792cf762c33d6fa15a4599b5a8de7"
+  }
+]
