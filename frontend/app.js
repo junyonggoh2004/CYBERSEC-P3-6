@@ -62,6 +62,140 @@ function humanBytes(n) {
   return `${(n / 1024 / 1024).toFixed(2)} MB`;
 }
 
+/* Shared preview ownership: replaced files must not leave object URLs alive. */
+const previewUrls = new Map();
+function releasePreviewUrl(slot) {
+  if (previewUrls.has(slot)) URL.revokeObjectURL(previewUrls.get(slot));
+  previewUrls.delete(slot);
+}
+function previewUrl(slot, bytes, mime = "") {
+  releasePreviewUrl(slot);
+  const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+  previewUrls.set(slot, url);
+  return url;
+}
+window.addEventListener("pagehide", () => {
+  for (const slot of previewUrls.keys()) releasePreviewUrl(slot);
+});
+
+const comparisons = new Map();
+const fileReadTokens = {};
+let encodeRevision = 0;
+let encodeBusy = false;
+let decodeRevision = 0;
+let decodeBusy = false;
+function mediaDescriptor(bytes, name, kind, mime = "") {
+  return bytes ? { bytes, name: name || "Selected file", kind, mime } : null;
+}
+function fitComparisonImages(view) {
+  const loaded = view.images.filter(img => img.naturalWidth && img.naturalHeight);
+  if (!loaded.length) return;
+  // Use one pixels-to-CSS-pixels ratio for both images, including unlike dimensions.
+  const scale = Math.min(1, ...loaded.flatMap(img => [
+    (img.parentElement.clientWidth - 24) / img.naturalWidth,
+    (img.parentElement.clientHeight - 24) / img.naturalHeight,
+  ]));
+  loaded.forEach(img => {
+    img.style.width = `${Math.max(0, img.naturalWidth * scale)}px`;
+    img.style.height = `${Math.max(0, img.naturalHeight * scale)}px`;
+  });
+}
+function renderComparison(prefix, left, right) {
+  const previous = comparisons.get(prefix);
+  previous?.observer?.disconnect();
+  const grid = $(`#${prefix}-comparison-grid`);
+  const notice = $(`#${prefix}-comparison-note`);
+  grid.replaceChildren(); notice.textContent = "";
+  const view = { images: [], dimensions: [], failures: new Set(), observer: null };
+  comparisons.set(prefix, view);
+  const labels = prefix === "encode" ? ["Original cover", "Encoded stego object"] : ["Original reference", "Received stego object"];
+  function updateNotice() {
+    if (comparisons.get(prefix) !== view) return;
+    const notes = [];
+    if (left && right && left.kind !== right.kind) notes.push("The selected objects have different media types; choose a matching reference for comparison.");
+    if (view.dimensions[0] && view.dimensions[1] && view.dimensions[0] !== view.dimensions[1]) notes.push("Image dimensions differ. Both are shown at the same scale; the reference is for comparison only.");
+    notes.push(...view.failures);
+    notice.textContent = notes.join(" ");
+    fitComparisonImages(view);
+  }
+  [left, right].forEach((file, index) => {
+    const slot = `${prefix}-comparison-${index}`;
+    releasePreviewUrl(slot);
+    const figure = document.createElement("figure"); figure.className = "comparison-card";
+    const caption = document.createElement("figcaption"); caption.textContent = labels[index];
+    const stage = document.createElement("div"); stage.className = "comparison-stage";
+    const filename = document.createElement("p"); filename.className = "comparison-file";
+    const meta = document.createElement("p"); meta.className = "comparison-meta";
+    figure.append(caption, stage, filename, meta); grid.append(figure);
+    if (!file) {
+      const empty = document.createElement("p"); empty.className = "comparison-placeholder";
+      empty.textContent = prefix === "encode"
+        ? (index === 0 ? "Choose a cover to preview the original." : "Encode your payload to see the stego object here.")
+        : (index === 0 ? "Add an optional original reference. You can verify without it." : "Choose a received stego file to compare.");
+      stage.append(empty); filename.textContent = "No file selected"; meta.textContent = "—";
+      return;
+    }
+    filename.textContent = file.name;
+    meta.textContent = `${humanBytes(file.bytes.length)} · ${file.bytes.length.toLocaleString()} bytes`;
+    const kind = file.kind || "image";
+    const media = document.createElement(kind === "image" ? "img" : kind === "audio" ? "audio" : "video");
+    if (kind === "image") {
+      media.alt = `${labels[index]}: ${file.name}`; view.images.push(media);
+      media.onload = () => {
+        if (comparisons.get(prefix) !== view) return;
+        view.dimensions[index] = `${media.naturalWidth} × ${media.naturalHeight}`;
+        meta.textContent += ` · ${view.dimensions[index]} px`;
+        updateNotice();
+      };
+    } else {
+      media.controls = true; media.preload = "metadata";
+      media.setAttribute("aria-label", `${labels[index]} playback: ${file.name}`);
+      media.onloadedmetadata = () => {
+        if (comparisons.get(prefix) !== view) return;
+        if (Number.isFinite(media.duration)) meta.textContent += ` · ${media.duration.toFixed(2)} seconds`;
+      };
+    }
+    media.onerror = () => {
+      if (comparisons.get(prefix) !== view) return;
+      const error = document.createElement("p"); error.className = "comparison-placeholder";
+      error.textContent = "Preview unavailable. The file may be damaged or unsupported by this browser.";
+      stage.replaceChildren(error); view.images = view.images.filter(img => img !== media);
+      view.failures.add(`${labels[index]} cannot be previewed. Verification remains a separate check.`); updateNotice();
+    };
+    stage.append(media); media.src = previewUrl(slot, file.bytes, file.mime);
+  });
+  view.observer = new ResizeObserver(() => fitComparisonImages(view));
+  view.observer.observe(grid); updateNotice();
+}
+function currentCover() {
+  return mediaDescriptor(state.encode.coverBytes, state.encode.coverFilename, state.encode.coverType);
+}
+function refreshEncodeComparison() {
+  renderComparison("encode", currentCover(), null);
+  $("#encode-comparison-settings").textContent = state.encode.coverBytes
+    ? `${$("#encode-num-lsb").value} LSB(s) selected · payload ${humanBytes(estimatePayloadSize())}. Encode to compare the saved output.`
+    : "Choose a cover file to begin. The encoded object will appear alongside it.";
+}
+function invalidateEncodeResult() {
+  encodeRevision++;
+  lastStego = null;
+  $("#encode-result").hidden = true;
+  $("#encode-download-link").removeAttribute("href");
+  releasePreviewUrl("encode-download");
+  refreshEncodeComparison();
+}
+function refreshDecodeComparison() {
+  renderComparison("decode", state.decode.reference,
+    mediaDescriptor(state.decode.stegoBytes, state.decode.stegoFilename, state.decode.coverType));
+}
+function invalidateDecodeResult() {
+  decodeRevision++;
+  $("#demo-outcome").textContent = "";
+  $("#decode-result").hidden = true;
+  ["payload-media", "payload-download"].forEach(releasePreviewUrl);
+  refreshDecodeComparison();
+}
+
 /* ------------------------------------------------------------------ *
  * Verification log (evidence trail)
  * ------------------------------------------------------------------ */
@@ -72,12 +206,16 @@ function addLog(action, coverType, verdict, ok, details) {
   logEntries.push(entry);
   const tbody = $("#log-body");
   const tr = document.createElement("tr");
-  tr.innerHTML = `
-    <td>${nowStr()}</td>
-    <td>${action}</td>
-    <td>${coverType}</td>
-    <td><span class="log-badge ${ok ? "ok" : "bad"}">${verdict}</span></td>
-    <td>${details || ""}</td>`;
+  [nowStr(), action, coverType, verdict, details || ""].forEach((value, index) => {
+    const cell = document.createElement("td");
+    if (index === 3) {
+      const badge = document.createElement("span");
+      badge.className = `log-badge ${ok ? "ok" : "bad"}`;
+      badge.textContent = value;
+      cell.appendChild(badge);
+    } else cell.textContent = value;
+    tr.appendChild(cell);
+  });
   tbody.prepend(tr);
 }
 
@@ -105,6 +243,7 @@ async function loadPublicKey() {
     const data = await res.json();
     if (data.public_key_pem) {
       $("#decode-public-key").value = data.public_key_pem;
+    invalidateDecodeResult();
       $("#key-status").textContent = "Key pair ready.";
     }
   } catch (e) {
@@ -121,6 +260,7 @@ $("#btn-gen-keys").addEventListener("click", async (e) => {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     $("#decode-public-key").value = data.public_key_pem;
+    invalidateDecodeResult();
     $("#key-status").textContent = "New key pair generated.";
     addLog("Generate keys", "-", "OK", true, "New RSA-2048 key pair generated.");
     flashButton(btn, "✅ Generated");
@@ -189,7 +329,7 @@ function setupTabbar(groupName, onChange) {
 
 const state = {
   encode: { coverType: "image", coverBytes: null, coverFilename: null, payloadType: "text", payloadBytes: null, payloadFilename: null, payloadMime: null },
-  decode: { coverType: "image", stegoBytes: null, stegoBytesOriginal: null, stegoFilename: null },
+  decode: { coverType: "image", stegoBytes: null, stegoBytesOriginal: null, stegoFilename: null, reference: null, modified: false },
 };
 
 // Applying a cover type never touches an already-loaded file by itself -
@@ -227,8 +367,14 @@ function setupDropzone(dzId, inputId, onFile) {
   const input = document.getElementById(inputId);
 
   dz.addEventListener("click", (e) => {
-    if (e.target.closest(".dz-preview")) return;
+    if (e.target === input || e.target.closest(".dz-preview")) return;
     input.click();
+  });
+  dz.tabIndex = 0;
+  dz.setAttribute("role", "button");
+  dz.setAttribute("aria-label", inputId === "decode-reference-input" ? "Choose optional original reference" : inputId === "decode-stego-input" ? "Choose received stego file" : inputId === "encode-cover-input" ? "Choose cover file" : "Choose payload file");
+  dz.addEventListener("keydown", (e) => {
+    if (e.target === dz && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); input.click(); }
   });
   input.addEventListener("change", () => {
     if (input.files[0]) onFile(input.files[0]);
@@ -252,6 +398,9 @@ function setupDropzone(dzId, inputId, onFile) {
 }
 
 function resetDropzonePreview(prefix) {
+  fileReadTokens[prefix] = (fileReadTokens[prefix] || 0) + 1;
+  releasePreviewUrl(`dropzone-${prefix}`);
+  document.getElementById(`${prefix}-input`).value = "";
   document.getElementById(`${prefix}-preview`).hidden = true;
   document.getElementById(`${prefix}-preview`).innerHTML = "";
   document.querySelector(`#${prefix}-drop .dz-placeholder`).hidden = false;
@@ -270,9 +419,10 @@ function renderFilePreview(prefix, file, bytes, onRemove) {
   preview.hidden = false;
 
   const mime = file.type || "";
-  const blobUrl = URL.createObjectURL(new Blob([bytes]));
+  const blobUrl = previewUrl(`dropzone-${prefix}`, bytes, mime);
   if (mime.startsWith("image/") || /\.(png|jpe?g|bmp)$/i.test(file.name)) {
     const img = document.createElement("img");
+    img.alt = file.name;
     img.src = blobUrl;
     preview.appendChild(img);
   } else if (mime.startsWith("video/") || /\.(mp4|m4v|mkv|mov|avi|webm)$/i.test(file.name)) {
@@ -318,10 +468,13 @@ function renderFilePreview(prefix, file, bytes, onRemove) {
     toolbar.appendChild(removeBtn);
   }
   preview.appendChild(toolbar);
+  if (prefix === "decode-stego") invalidateDecodeResult();
 }
 
 /* ---- Encode: cover dropzone (accepts any supported file, auto-detects type) ---- */
 setupDropzone("encode-cover-drop", "encode-cover-input", async (file) => {
+  const selection = fileReadTokens["encode-cover"] = (fileReadTokens["encode-cover"] || 0) + 1;
+  state.encode.coverBytes = null; updateCapacity(); updateEncodeButtonState();
   const detected = detectCoverType(file);
   if (detected) {
     setActiveTab("encode-cover-type", detected);
@@ -329,6 +482,7 @@ setupDropzone("encode-cover-drop", "encode-cover-input", async (file) => {
   } // else: unrecognised file - keep whatever tab is currently selected, let the server explain if it's wrong
 
   const buf = new Uint8Array(await file.arrayBuffer());
+  if (selection !== fileReadTokens["encode-cover"]) return;
   state.encode.coverBytes = buf;
   state.encode.coverFilename = file.name;
   renderFilePreview("encode-cover", file, buf, () => {
@@ -343,7 +497,10 @@ setupDropzone("encode-cover-drop", "encode-cover-input", async (file) => {
 
 /* ---- Encode: payload file dropzone (for file/audio payload types) ---- */
 setupDropzone("encode-payload-file-drop", "encode-payload-file-input", async (file) => {
+  const selection = fileReadTokens["encode-payload-file"] = (fileReadTokens["encode-payload-file"] || 0) + 1;
+  state.encode.payloadBytes = null; updateCapacity(); updateEncodeButtonState();
   const buf = new Uint8Array(await file.arrayBuffer());
+  if (selection !== fileReadTokens["encode-payload-file"]) return;
   state.encode.payloadBytes = buf;
   state.encode.payloadFilename = file.name;
   state.encode.payloadMime = file.type || "application/octet-stream";
@@ -363,11 +520,14 @@ function clearDecodeStego() {
   state.decode.stegoBytes = null;
   state.decode.stegoBytesOriginal = null;
   state.decode.stegoFilename = null;
+  invalidateDecodeResult();
   updateDecodeButtonState();
 }
 
 // Accepts any supported stego file and auto-detects image/audio/video.
 setupDropzone("decode-stego-drop", "decode-stego-input", async (file) => {
+  const selection = fileReadTokens["decode-stego"] = (fileReadTokens["decode-stego"] || 0) + 1;
+  state.decode.stegoBytes = null; invalidateDecodeResult(); updateDecodeButtonState();
   const detected = detectCoverType(file);
   if (detected) {
     setActiveTab("decode-cover-type", detected);
@@ -375,11 +535,27 @@ setupDropzone("decode-stego-drop", "decode-stego-input", async (file) => {
   }
 
   const buf = new Uint8Array(await file.arrayBuffer());
+  if (selection !== fileReadTokens["decode-stego"]) return;
   state.decode.stegoBytes = buf;
   state.decode.stegoBytesOriginal = buf.slice();
+  state.decode.modified = false;
   state.decode.stegoFilename = file.name;
   renderFilePreview("decode-stego", file, buf, clearDecodeStego);
   updateDecodeButtonState();
+});
+
+setupDropzone("decode-reference-drop", "decode-reference-input", async (file) => {
+  const selection = fileReadTokens["decode-reference"] = (fileReadTokens["decode-reference"] || 0) + 1;
+  state.decode.reference = null;
+  refreshDecodeComparison();
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (selection !== fileReadTokens["decode-reference"]) return;
+  state.decode.reference = mediaDescriptor(bytes, file.name, detectCoverType(file), file.type);
+  renderFilePreview("decode-reference", file, bytes, () => {
+    state.decode.reference = null;
+    refreshDecodeComparison();
+  });
+  refreshDecodeComparison();
 });
 
 /* ------------------------------------------------------------------ *
@@ -440,6 +616,7 @@ $("#encode-passphrase").addEventListener("input", updateCapacity);
  * ------------------------------------------------------------------ */
 let capacityTimer = null;
 function updateCapacity() {
+  invalidateEncodeResult();
   clearTimeout(capacityTimer);
   capacityTimer = setTimeout(doCapacityCheck, 250);
 }
@@ -452,6 +629,7 @@ async function doCapacityCheck() {
     fill.style.width = "0%";
     return;
   }
+  const revision = encodeRevision;
   const fd = new FormData();
   fd.append("cover_type", state.encode.coverType);
   fd.append("num_lsb", $("#encode-num-lsb").value);
@@ -463,6 +641,7 @@ async function doCapacityCheck() {
   try {
     const res = await fetch("/api/capacity", { method: "POST", body: fd });
     const data = await res.json();
+    if (revision !== encodeRevision) return;
     if (data.error) {
       bar.textContent = `⚠️ ${data.error}`;
       fill.style.width = "100%";
@@ -482,7 +661,7 @@ async function doCapacityCheck() {
     fill.classList.toggle("over", !fits);
     updateEncodeButtonState(fits);
   } catch (e) {
-    bar.textContent = "Could not check capacity (backend unreachable?).";
+    if (revision === encodeRevision) bar.textContent = "Could not check capacity (backend unreachable?).";
   }
 }
 
@@ -499,13 +678,27 @@ function updateEncodeButtonState(fitsOverride) {
     state.encode.payloadType === "text"
       ? $("#encode-payload-text").value.trim().length > 0
       : !!state.encode.payloadBytes;
-  $("#btn-encode").disabled = !(hasCover && hasPayload);
+  $("#btn-encode").disabled = encodeBusy || !(hasCover && hasPayload);
 }
 
+function updateTamperControls() {
+  const loaded = !!state.decode.stegoBytes;
+  const changed = loaded && state.decode.modified;
+  $("#btn-tamper-payload").disabled = !loaded || decodeBusy || changed;
+  $("#btn-clear-tamper").disabled = !changed || decodeBusy;
+  $("#tamper-state").textContent = !loaded ? "No file loaded" : changed ? "Modified copy" : "Unmodified copy";
+  $("#tamper-state").classList.toggle("is-modified", !!changed);
+  $("#tamper-help").textContent = !loaded
+    ? "Load a received stego file to enable this test."
+    : changed
+      ? "One bit has changed. Run Decode to see the actual verdict, or reset to the file you loaded."
+      : "Ready to test. A bit flip can damage PNG structure; the result may be Cannot Verify instead of Tampered. Use the guided WAV case for a controlled Tampered result.";
+}
 function updateDecodeButtonState() {
+  updateTamperControls();
   const has = !!state.decode.stegoBytes;
-  $("#btn-decode-sync").disabled = !has;
-  $("#btn-decode-async").disabled = !has;
+  $("#btn-decode-sync").disabled = decodeBusy || !has;
+  $("#btn-decode-async").disabled = decodeBusy || !has;
 }
 
 /* ------------------------------------------------------------------ *
@@ -513,6 +706,12 @@ function updateDecodeButtonState() {
  * ------------------------------------------------------------------ */
 $("#btn-encode").addEventListener("click", async () => {
   const btn = $("#btn-encode");
+  const revision = encodeRevision;
+  const snapshot = { cover: currentCover(), coverType: state.encode.coverType, payloadType: state.encode.payloadType, payloadSize: estimatePayloadSize() };
+  if (!snapshot.cover || encodeBusy) return;
+  snapshot.cover = { ...snapshot.cover, bytes: snapshot.cover.bytes.slice() };
+  encodeBusy = true;
+  $("#encode-feedback").textContent = "Encoding the selected cover…";
   btn.disabled = true;
   btn.textContent = "Encoding…";
   try {
@@ -544,7 +743,12 @@ $("#btn-encode").addEventListener("click", async () => {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
-    renderEncodeResult(data);
+    if (revision !== encodeRevision) {
+      $("#encode-feedback").textContent = "Inputs changed while encoding. Encode again to compare the current selection.";
+      return;
+    }
+    renderEncodeResult(data, snapshot);
+    $("#encode-feedback").textContent = "Encoding complete. Compare the original and stego object below.";
     addLog(
       "Encode",
       state.encode.coverType,
@@ -554,46 +758,31 @@ $("#btn-encode").addEventListener("click", async () => {
     );
   } catch (e) {
     addLog("Encode", state.encode.coverType, "FAILED", false, e.message);
-    alert(`Encoding failed: ${e.message}`);
+    $("#encode-feedback").textContent = `Encoding failed: ${e.message}`;
   } finally {
-    btn.disabled = false;
+    encodeBusy = false;
+    updateEncodeButtonState();
     btn.textContent = "🔏 Sign & Embed Payload";
   }
 });
 
 let lastStego = null; // { bytes, filename, mime }
 
-function renderEncodeResult(data) {
+function renderEncodeResult(data, snapshot) {
   const bytes = b64ToBytes(data.stego_base64);
-  lastStego = { bytes, filename: data.stego_filename, mime: data.mime };
+  lastStego = { bytes, filename: data.stego_filename, mime: data.mime, original: snapshot.cover, coverType: snapshot.coverType };
 
   const panel = $("#encode-result");
   panel.hidden = false;
 
-  const preview = $("#encode-stego-preview");
-  preview.innerHTML = "";
-  const blobUrl = URL.createObjectURL(new Blob([bytes], { type: data.mime }));
-  if (data.mime.startsWith("image/")) {
-    const img = document.createElement("img");
-    img.src = blobUrl;
-    preview.appendChild(img);
-  } else if (data.mime.startsWith("video/")) {
-    const video = document.createElement("video");
-    video.controls = true;
-    video.style.maxHeight = "220px";
-    video.src = blobUrl;
-    preview.appendChild(video);
-  } else {
-    const audio = document.createElement("audio");
-    audio.controls = true;
-    audio.src = blobUrl;
-    preview.appendChild(audio);
-  }
+  const blobUrl = previewUrl("encode-download", bytes, data.mime);
+  renderComparison("encode", snapshot.cover, mediaDescriptor(bytes, data.stego_filename, snapshot.coverType, data.mime));
+  $("#encode-comparison-settings").textContent = `${data.num_lsb} LSB(s) · payload ${humanBytes(snapshot.payloadSize)} · complete package ${humanBytes(data.container_size_bytes)} · start ${data.start_index}`;
 
   const kv = $("#encode-result-kv");
   kv.innerHTML = "";
   const payloadLabel =
-    state.encode.payloadType === "text"
+    snapshot.payloadType === "text"
       ? "(typed text message)"
       : data.metadata.filename || "(unnamed file)";
   const rows = [
@@ -626,10 +815,18 @@ function renderEncodeResult(data) {
 
 $("#btn-send-to-decode").addEventListener("click", () => {
   if (!lastStego) return;
+  for (const prefix of ["decode-stego", "decode-reference"]) {
+    fileReadTokens[prefix] = (fileReadTokens[prefix] || 0) + 1;
+  }
   state.decode.stegoBytes = lastStego.bytes.slice();
   state.decode.stegoBytesOriginal = lastStego.bytes.slice();
+  state.decode.modified = false;
   state.decode.stegoFilename = lastStego.filename;
-  state.decode.coverType = state.encode.coverType;
+  state.decode.coverType = lastStego.coverType;
+  state.decode.reference = { ...lastStego.original, bytes: lastStego.original.bytes.slice() };
+  renderFilePreview("decode-reference", fileFromBytes(state.decode.reference.bytes, state.decode.reference.name, state.decode.reference.mime), state.decode.reference.bytes, () => {
+    state.decode.reference = null; refreshDecodeComparison();
+  });
 
   // Switch the decode tab to match, mirror settings a legitimate Party B
   // would have agreed on out-of-band, and load the file into the dropzone.
@@ -645,18 +842,21 @@ $("#btn-send-to-decode").addEventListener("click", () => {
   const fakeFile = fileFromBytes(lastStego.bytes, lastStego.filename, lastStego.mime);
   renderFilePreview("decode-stego", fakeFile, lastStego.bytes, clearDecodeStego);
   updateDecodeButtonState();
-  addLog("Send to Party B", state.encode.coverType, "OK", true, "Stego file handed to Decode panel.");
+  addLog("Demo shortcut", state.encode.coverType, "OK", true, "Local copy and original reference loaded into Verify; this is not an actual transfer.");
+  $("#decode-card").scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
 /* ------------------------------------------------------------------ *
  * Negative-case tools
  * ------------------------------------------------------------------ */
 $("#btn-tamper-payload").addEventListener("click", (e) => {
-  if (!state.decode.stegoBytes) return;
+  if (!state.decode.stegoBytes || decodeBusy || state.decode.modified) return;
   const bytes = state.decode.stegoBytes.slice();
   const offset = Math.max(64, Math.min(bytes.length - 8, Math.floor(bytes.length * 0.55)));
   bytes[offset] ^= 0x80; // flip a high (non-LSB) bit so this reads as visible-content tampering
   state.decode.stegoBytes = bytes;
+  state.decode.modified = true;
+  updateTamperControls();
   const fakeFile = fileFromBytes(bytes, state.decode.stegoFilename || "tampered", "");
   renderFilePreview("decode-stego", fakeFile, bytes, clearDecodeStego);
   addLog("Tamper tool", state.decode.coverType, "Applied", true, `Flipped bit at byte offset ${offset}`);
@@ -664,8 +864,10 @@ $("#btn-tamper-payload").addEventListener("click", (e) => {
 });
 
 $("#btn-clear-tamper").addEventListener("click", (e) => {
-  if (!state.decode.stegoBytesOriginal) return;
+  if (!state.decode.stegoBytesOriginal || decodeBusy) return;
   state.decode.stegoBytes = state.decode.stegoBytesOriginal.slice();
+  state.decode.modified = false;
+  updateTamperControls();
   const fakeFile = fileFromBytes(state.decode.stegoBytes, state.decode.stegoFilename || "stego", "");
   renderFilePreview("decode-stego", fakeFile, state.decode.stegoBytes, clearDecodeStego);
   addLog("Tamper tool", state.decode.coverType, "Reset", true, "Restored original stego bytes.");
@@ -678,6 +880,7 @@ $("#btn-use-server-key").addEventListener("click", async (e) => {
   const data = await res.json();
   if (data.public_key_pem) {
     $("#decode-public-key").value = data.public_key_pem;
+    invalidateDecodeResult();
     flashButton(btn, "✅ Loaded");
   }
 });
@@ -688,9 +891,104 @@ $("#btn-mangle-key").addEventListener("click", async (e) => {
   const data = await res.json();
   if (data.public_key_pem) {
     $("#decode-public-key").value = data.public_key_pem;
+    invalidateDecodeResult();
     addLog("Negative case", state.decode.coverType, "Decoy key loaded", true, "Loaded an unrelated public key to demo Signature Invalid.");
     flashButton(btn, "✅ Decoy loaded");
   }
+});
+
+/* Guided cases change only the local receiver inputs; never the saved file or keys. */
+const DEMO_CASES = {
+  "positive-image": { kind: "image", expected: "Authentic", steps: [
+    "Encode a PNG with the Short (Learning Outcome) quick-fill message. Check capacity first.",
+    "Download and transfer the stego PNG to Party B. Load the downloaded file here.",
+    "Use the sender's trusted public key and matching LSB/start settings, then decode. Record the extracted message and all three verification checks." ] },
+  "positive-audio": { kind: "audio", expected: "Authentic", steps: [
+    "Encode a WAV with the Large (Project Overview) quick-fill message. Check that the complete package fits.",
+    "Transfer and download the stego WAV. Play both objects, then verify with matching settings and the trusted public key.",
+    "Repeat with your team's custom payload to demonstrate a third message size." ] },
+  "wrong-key": { kind: "image", expected: "Signature Invalid", action: "Load a decoy public key", steps: [
+    "Load a valid stego PNG and first verify it as Authentic with matching settings.",
+    "Prepare this case to load an unrelated public key, then decode again. The saved key pair is unchanged.",
+    "Capture Signature Invalid. Afterwards click Use current server key (for files signed by this server), or reload the sender's trusted key." ] },
+  "tampered-audio": { kind: "audio", expected: "Tampered", action: "Alter the loaded WAV copy", steps: [
+    "Encode WAV at 1 LSB with Manual offset 700. Load the stego WAV and first verify it as Authentic.",
+    "Keep the correct public key and matching manual settings. Prepare this case to flip a bit in the loaded audio copy, then decode.",
+    "Capture Tampered and the failed cover-integrity check. Reset to original and verify again to show recovery." ] },
+  "missing": { kind: "image", expected: "Payload Missing", action: "Use original reference as received PNG", steps: [
+    "Choose an unencoded PNG in the optional Original reference selector. Use the correct public key.",
+    "Prepare this case to copy that PNG into the received-file input and set 1 LSB, Manual offset 0. Then decode.",
+    "Capture Payload Missing. Reload the actual stego PNG afterwards. The reference must really be an unencoded original." ] },
+  "wrong-start": { expected: "Wrong Start Location", action: "Change the receiver passphrase", steps: [
+    "Encode PNG or WAV using passphrase-derived start mode, then verify once with the correct passphrase.",
+    "Prepare this case to change only the receiver passphrase, then decode. Keep the same LSB depth and trusted public key.",
+    "Restore the agreed passphrase afterwards. A missing payload and a wrong start can be indistinguishable; this verdict uses the selected start mode." ] },
+  "oversized": { expected: "Encoding rejected (capacity error)", steps: [
+    "In Protect, choose a small cover and 1 LSB. Note usable embedding capacity.",
+    "Choose a payload file larger than that capacity and attempt encoding. Capture the capacity warning and rejection; no new stego output should be produced.",
+    "This is an encoding case, not a decode verdict. Compare package bytes (payload + metadata + signature) against capacity, not cover file size." ] },
+  "invalid-key": { expected: "Cannot Verify", action: "Insert invalid public-key text", steps: [
+    "Load a valid stego PNG or WAV with matching decoding settings.",
+    "Prepare this case to replace the receiver key field with invalid text, then decode.",
+    "Capture Cannot Verify, then restore the trusted public key." ] },
+};
+$("#demo-case").addEventListener("change", () => {
+  const demo = DEMO_CASES[$("#demo-case").value];
+  $("#demo-expected").textContent = demo ? `Expected result: ${demo.expected}` : "";
+  $("#demo-steps").replaceChildren();
+  for (const step of demo?.steps || []) {
+    const li = document.createElement("li"); li.textContent = step; $("#demo-steps").append(li);
+  }
+  $("#btn-demo-prepare").hidden = !demo?.action;
+  $("#btn-demo-prepare").textContent = demo?.action || "Prepare case";
+  $("#demo-feedback").textContent = "";
+  $("#demo-outcome").textContent = "";
+});
+$("#btn-demo-prepare").addEventListener("click", async () => {
+  const button = $("#btn-demo-prepare");
+  const id = $("#demo-case").value;
+  const demo = DEMO_CASES[id];
+  const feedback = $("#demo-feedback");
+  if (decodeBusy) { feedback.textContent = "Wait for the current verification to finish."; return; }
+  button.disabled = true;
+  try {
+    if (id === "missing") {
+      const original = state.decode.reference;
+      if (!original || original.kind !== "image" || !/\.png$/i.test(original.name)) throw new Error("Select an unencoded PNG as the Original reference first.");
+      fileReadTokens["decode-stego"] = (fileReadTokens["decode-stego"] || 0) + 1;
+      state.decode.stegoBytes = original.bytes.slice();
+      state.decode.stegoBytesOriginal = original.bytes.slice();
+      state.decode.modified = false;
+      state.decode.stegoFilename = original.name;
+      applyDecodeCoverType("image"); setActiveTab("decode-cover-type", "image");
+      $("#decode-num-lsb").value = "1"; $("#decode-num-lsb-out").textContent = "1";
+      $("#decode-start-mode").value = "manual"; $("#decode-offset").value = "0";
+      $("#decode-offset-field").hidden = false; $("#decode-passphrase-field").hidden = true;
+      renderFilePreview("decode-stego", fileFromBytes(original.bytes, original.name, "image/png"), original.bytes, clearDecodeStego);
+      updateDecodeButtonState();
+    } else {
+      if (!state.decode.stegoBytes || (demo.kind && state.decode.coverType !== demo.kind)) throw new Error(`Load a valid ${demo.kind === "image" ? "PNG" : demo.kind === "audio" ? "WAV" : "PNG or WAV"} stego file first.`);
+      if (id === "wrong-key") {
+        const response = await fetch("/api/keys/decoy", { method: "POST" });
+        const data = await response.json();
+        if (!response.ok || !data.public_key_pem) throw new Error(data.error || "Could not load a decoy key.");
+        if ($("#demo-case").value !== id) return;
+        $("#decode-public-key").value = data.public_key_pem;
+      } else if (id === "tampered-audio") {
+        if ($("#decode-start-mode").value !== "manual" || $("#decode-num-lsb").value !== "1") throw new Error("Use a WAV encoded with 1 LSB and manual start mode. Keep the original matching offset.");
+        $("#btn-tamper-payload").click();
+      } else if (id === "wrong-start") {
+        if ($("#decode-start-mode").value !== "passphrase") throw new Error("Use a file encoded in passphrase-derived mode first.");
+        $("#decode-passphrase").value += "-wrong-demo";
+      } else if (id === "invalid-key") {
+        $("#decode-public-key").value = "INVALID PUBLIC KEY - ACW1 negative case";
+      }
+    }
+    invalidateDecodeResult();
+    feedback.textContent = "Case prepared. Run Decode to obtain the actual verdict; an expected result is not evidence until verified.";
+    addLog("Demo setup", state.decode.coverType, "Prepared", true, `${id}: expected ${demo.expected}`);
+  } catch (error) { feedback.textContent = error.message; }
+  finally { button.disabled = false; }
 });
 
 /* ------------------------------------------------------------------ *
@@ -711,62 +1009,58 @@ function buildDecodeFormData() {
   return fd;
 }
 
-$("#btn-decode-sync").addEventListener("click", async () => {
-  const btn = $("#btn-decode-sync");
-  btn.disabled = true;
-  btn.textContent = "Decoding…";
+async function runDecode(mode) {
+  if (decodeBusy || !state.decode.stegoBytes) return;
+  decodeBusy = true;
+  const revision = decodeRevision;
+  const kind = state.decode.coverType;
+  const demoId = $("#demo-case").value;
+  const status = $("#async-status");
+  status.hidden = false;
+  status.textContent = "Extracting and verifying the received file…";
+  updateDecodeButtonState();
   try {
-    const res = await fetch("/api/decode?mode=sync", { method: "POST", body: buildDecodeFormData() });
-    const data = await res.json();
+    const response = await fetch(`/api/decode?mode=${mode}`, { method: "POST", body: buildDecodeFormData() });
+    let data = await response.json();
     if (data.error) throw new Error(data.error);
-    renderDecodeResult(data);
-  } catch (e) {
-    addLog("Decode (sync)", state.decode.coverType, "FAILED", false, e.message);
-    alert(`Decoding failed: ${e.message}`);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "🔎 Decode (Synchronous)";
-    updateDecodeButtonState();
-  }
-});
-
-$("#btn-decode-async").addEventListener("click", async () => {
-  const btn = $("#btn-decode-async");
-  const statusEl = $("#async-status");
-  btn.disabled = true;
-  statusEl.hidden = false;
-  statusEl.textContent = "Submitted to background worker thread…";
-  try {
-    const res = await fetch("/api/decode?mode=async", { method: "POST", body: buildDecodeFormData() });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    const jobId = data.job_id;
-    let attempts = 0;
-    const poll = async () => {
-      attempts++;
-      const jr = await fetch(`/api/jobs/${jobId}`);
-      const jdata = await jr.json();
-      if (jdata.status === "pending") {
-        statusEl.textContent = `Still running asynchronously… (poll #${attempts})`;
-        setTimeout(poll, 400);
-        return;
+    if (mode === "async") {
+      const jobId = data.job_id;
+      const deadline = Date.now() + 120000;
+      while (true) {
+        if (Date.now() > deadline) throw new Error("Verification timed out. Try again with a smaller file.");
+        await new Promise(resolve => setTimeout(resolve, 400));
+        const result = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
+        data = await result.json();
+        if (!result.ok || data.status === "error") throw new Error(data.error || "Verification failed.");
+        if (data.status === "done") { data = data.result; break; }
       }
-      if (jdata.status === "error") throw new Error(jdata.error);
-      statusEl.textContent = "Async job complete.";
-      renderDecodeResult(jdata.result);
-      btn.disabled = false;
-      updateDecodeButtonState();
-    };
-    poll();
-  } catch (e) {
-    addLog("Decode (async)", state.decode.coverType, "FAILED", false, e.message);
-    alert(`Async decoding failed: ${e.message}`);
-    btn.disabled = false;
+    }
+    if (revision !== decodeRevision) {
+      status.textContent = "Received file or settings changed. Run verification again for the current selection.";
+      return;
+    }
+    renderDecodeResult(data);
+    const demo = DEMO_CASES[demoId];
+    if (demo && demoId !== "oversized") {
+      const matches = data.verdict === demo.expected && (!demo.kind || demo.kind === kind);
+      const evidence = `Expected ${demo.expected}${demo.kind ? ` (${demo.kind})` : ""}; observed ${data.verdict} (${kind}). ${matches ? "Matches expected case result." : "Does not match this case; check the setup."}`;
+      if ($("#demo-case").value === demoId) $("#demo-outcome").textContent = evidence;
+      addLog("Demo result", kind, data.verdict, matches, `${demoId}: ${evidence}`);
+    }
+    status.textContent = "Verification complete. The reference and received object remain above for comparison.";
+  } catch (error) {
+    addLog(`Decode (${mode})`, kind, "FAILED", false, error.message);
+    status.textContent = `Verification failed: ${error.message}`;
+  } finally {
+    decodeBusy = false;
     updateDecodeButtonState();
   }
-});
+}
+$("#btn-decode-sync").addEventListener("click", () => runDecode("sync"));
+$("#btn-decode-async").addEventListener("click", () => runDecode("async"));
 
 function renderDecodeResult(data) {
+  ["payload-media", "payload-download"].forEach(releasePreviewUrl);
   const panel = $("#decode-result");
   panel.hidden = false;
 
@@ -817,24 +1111,24 @@ function renderDecodeResult(data) {
     } else if (mime.startsWith("audio/")) {
       const audio = document.createElement("audio");
       audio.controls = true;
-      audio.src = URL.createObjectURL(new Blob([bytes], { type: mime }));
+      audio.src = previewUrl("payload-media", bytes, mime);
       extracted.appendChild(audio);
     } else if (mime.startsWith("image/")) {
       const img = document.createElement("img");
       img.style.maxHeight = "160px";
-      img.src = URL.createObjectURL(new Blob([bytes], { type: mime }));
+      img.src = previewUrl("payload-media", bytes, mime);
       extracted.appendChild(img);
     } else if (mime.startsWith("video/")) {
       const video = document.createElement("video");
       video.controls = true;
       video.style.maxHeight = "200px";
-      video.src = URL.createObjectURL(new Blob([bytes], { type: mime }));
+      video.src = previewUrl("payload-media", bytes, mime);
       extracted.appendChild(video);
     }
     const link = document.createElement("a");
     link.className = "btn btn-secondary";
     link.textContent = `⬇️ Download extracted payload (${humanBytes(bytes.length)})`;
-    link.href = URL.createObjectURL(new Blob([bytes], { type: mime }));
+    link.href = previewUrl("payload-download", bytes, mime);
     link.download = data.data_filename || "extracted_payload.bin";
     extracted.appendChild(document.createElement("br"));
     extracted.appendChild(link);
@@ -858,3 +1152,24 @@ function renderDecodeResult(data) {
  * Init
  * ------------------------------------------------------------------ */
 loadPublicKey();
+
+// Comparison state follows inputs, independently of cryptographic verification.
+$("#encode-media-id").addEventListener("input", updateCapacity);
+["decode-num-lsb", "decode-start-mode", "decode-offset", "decode-passphrase", "decode-public-key"].forEach(id => {
+  document.getElementById(id).addEventListener("input", invalidateDecodeResult);
+});
+const themeButton = $("#btn-theme");
+function renderThemeButton() {
+  const dark = document.documentElement.dataset.theme === "dark";
+  themeButton.textContent = dark ? "Light theme" : "Dark theme";
+  themeButton.setAttribute("aria-pressed", String(dark));
+}
+themeButton.addEventListener("click", () => {
+  const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = theme;
+  try { localStorage.setItem("stego-theme", theme); } catch (_) {}
+  renderThemeButton();
+});
+renderThemeButton();
+refreshEncodeComparison();
+refreshDecodeComparison();

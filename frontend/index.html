@@ -1,10 +1,16 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Stego Integrity Verifier</title>
 <link rel="stylesheet" href="style.css" />
+<script>
+  try {
+    const savedTheme = localStorage.getItem("stego-theme");
+    if (savedTheme === "dark" || savedTheme === "light") document.documentElement.dataset.theme = savedTheme;
+  } catch (_) { /* Light remains the default when storage is unavailable. */ }
+</script>
 </head>
 <body>
 <header class="topbar">
@@ -16,6 +22,7 @@
     </div>
   </div>
   <div class="key-panel">
+    <button id="btn-theme" class="btn btn-ghost" type="button" aria-pressed="false">Dark theme</button>
     <button id="btn-gen-keys" class="btn btn-ghost">Generate new key pair</button>
     <button id="btn-show-key" class="btn btn-ghost">View public key</button>
     <span id="key-status" class="key-status">Loading key…</span>
@@ -24,17 +31,21 @@
 
 <nav class="quicknav" aria-label="Jump to section">
   <a href="#encode-card">1️⃣ Protect</a>
+  <a href="#encode-comparison">Compare</a>
   <a href="#decode-card">2️⃣ Verify</a>
   <a href="#analysis-card">Steganalysis</a>
   <a href="#log-card">📋 Log</a>
 </nav>
 
 <main class="layout">
+  <div class="workspace-intro"><p class="eyebrow">MEDIA INTEGRITY WORKSPACE</p><h2>Steganographic Image and Audio Integrity Verification with Digital Signature-Based Authentication</h2><p>Keep the original in view. Inspect the stego output. Verify the hidden payload.</p></div>
 
   <!-- ============================= ENCODE ============================= -->
-  <section class="card" id="encode-card">
+  <section class="card wide" id="encode-card">
     <h2><span class="step-badge">1</span> Protect (Encode)</h2>
 
+    <p class="section-intro">Party A · Choose your media and payload, then compare the saved output.</p>
+    <div class="workflow-grid"><div class="workflow-column">
     <p class="section-label">📁 Cover object</p>
     <div class="tabbar" data-group="encode-cover-type">
       <button class="tab active" data-value="image" type="button">🖼️ Image (PNG)</button>
@@ -54,6 +65,7 @@
     </div>
     <div class="info-row" id="encode-cover-info"></div>
 
+    </div><div class="workflow-column">
     <p class="section-label">📦 Payload — what to hide inside the cover</p>
     <label class="field">
       <span>Payload type</span>
@@ -83,6 +95,7 @@
       <div class="dz-preview" id="encode-payload-file-preview" hidden></div>
     </div>
 
+    </div></div>
     <p class="section-label">🔐 Security settings — LSB depth &amp; start location</p>
     <div class="field-grid">
       <label class="field">
@@ -122,26 +135,43 @@
 
     <button id="btn-encode" class="btn btn-primary btn-block" disabled>🔏 Sign &amp; Embed Payload</button>
 
+    <p id="encode-feedback" class="workflow-feedback" role="status" aria-live="polite"></p>
+    <section class="comparison-panel" id="encode-comparison" aria-labelledby="encode-comparison-title">
+      <div class="comparison-heading"><div><p class="eyebrow">BEFORE &amp; AFTER ENCODING</p><h3 id="encode-comparison-title">Cover and stego comparison</h3></div><span class="comparison-badge">Original stays unchanged</span></div>
+      <div class="comparison-grid" id="encode-comparison-grid"></div>
+      <p id="encode-comparison-note" class="comparison-note" role="status"></p>
+      <p id="encode-comparison-settings" class="comparison-settings">Choose a cover file to begin. The encoded object will appear alongside it.</p>
+    </section>
     <div class="result-panel" id="encode-result" hidden>
       <p class="section-label">✅ Result</p>
       <h3>Stego object produced</h3>
-      <div class="stego-preview" id="encode-stego-preview"></div>
-      <div class="kv-list" id="encode-result-kv"></div>
+      <details><summary>Encoding details &amp; signature</summary>
+        <div class="kv-list" id="encode-result-kv"></div>
+      </details>
       <details>
         <summary>Verification payload metadata (signed)</summary>
         <pre id="encode-metadata-json"></pre>
       </details>
       <div class="actions-row">
         <a id="encode-download-link" class="btn btn-secondary" download>⬇️ Download stego file</a>
-        <button id="btn-send-to-decode" class="btn btn-secondary" type="button">➡️ Send to Party B (load into Decode)</button>
+        <button id="btn-send-to-decode" class="btn btn-secondary" type="button">➡️ Demo shortcut: load into Verify</button>
       </div>
     </div>
   </section>
 
   <!-- ============================= DECODE ============================= -->
-  <section class="card" id="decode-card">
+  <section class="card wide" id="decode-card">
     <h2><span class="step-badge">2</span> Verify (Decode)</h2>
 
+    <p class="section-intro">Party B · The original reference is optional and used only for comparison. Verification uses the received stego file.</p>
+    <div class="workflow-grid"><div class="workflow-column">
+      <p class="section-label">Original reference <span class="hint">optional</span></p>
+      <div class="dropzone" id="decode-reference-drop">
+        <input type="file" id="decode-reference-input" hidden accept=".png,.bmp,.jpg,.jpeg,.wav,.mp4,.mkv,.mov,.webm" />
+        <div class="dz-placeholder"><span class="dz-icon">◫</span><p>Choose or drop the <strong>original cover</strong></p><p class="dz-hint">For visual comparison or audio playback only</p></div>
+        <div class="dz-preview" id="decode-reference-preview" hidden></div>
+      </div>
+    </div><div class="workflow-column">
     <p class="section-label">📁 Stego file received</p>
     <div class="tabbar" data-group="decode-cover-type">
       <button class="tab active" data-value="image" type="button">🖼️ Image stego</button>
@@ -159,12 +189,54 @@
       <div class="dz-preview" id="decode-stego-preview" hidden></div>
     </div>
     <div class="info-row" id="decode-stego-info"></div>
+    </div></div>
+    <section class="comparison-panel" id="decode-comparison" aria-labelledby="decode-comparison-title">
+      <div class="comparison-heading"><div><p class="eyebrow">BEFORE &amp; AFTER DECODING</p><h3 id="decode-comparison-title">Original reference and received object</h3></div><span class="comparison-badge">Reference is optional</span></div>
+      <div class="comparison-grid" id="decode-comparison-grid"></div>
+      <p id="decode-comparison-note" class="comparison-note" role="status"></p>
+      <p class="comparison-settings">Decoding extracts the payload; it does not restore the original cover. Both selected objects remain visible after verification.</p>
+    </section>
 
-    <div class="tamper-row">
-      <span>🧪 Negative-case tools:</span>
-      <button type="button" class="btn btn-small btn-warn" id="btn-tamper-payload">Flip a bit (simulate tampering)</button>
-      <button type="button" class="btn btn-small btn-warn" id="btn-clear-tamper">↺ Reset to original</button>
-    </div>
+    <section class="demo-guide" aria-labelledby="demo-title">
+      <h3 id="demo-title">ACW1 demonstration cases</h3>
+      <p>Show two positive cases and at least three negative cases, covering both PNG and WAV. Select a case for instructions; verification always reports the actual result.</p>
+      <label class="field"><span>Demonstration case</span><select id="demo-case">
+        <option value="">Normal verification (no demo case)</option>
+        <option value="positive-image">Positive 1 · PNG / short message</option>
+        <option value="positive-audio">Positive 2 · WAV / large message</option>
+        <option value="wrong-key">Negative 1 · PNG / wrong signer</option>
+        <option value="tampered-audio">Negative 2 · WAV / changed audio</option>
+        <option value="missing">Negative 3 · PNG / no payload</option>
+        <option value="wrong-start">Extra · Wrong passphrase</option>
+        <option value="oversized">Extra · Payload exceeds capacity</option>
+        <option value="invalid-key">Extra · Invalid public key</option>
+      </select></label>
+      <p id="demo-expected" class="demo-expected"></p>
+      <ol id="demo-steps"></ol>
+      <button type="button" id="btn-demo-prepare" class="btn btn-secondary" hidden>Prepare case</button>
+      <p id="demo-feedback" role="status" aria-live="polite"></p>
+      <p id="demo-outcome" role="status" aria-live="polite"></p>
+      <details><summary>Transfer and evidence checklist</summary>
+        <ol><li>Party A encodes and downloads the PNG or WAV. Record payload size, package size, embedding capacity, LSB depth and start settings.</li>
+        <li>Send the downloaded file as an email attachment or another file-preserving transfer. Party B downloads it to a local folder and selects that file in Verify. The same-page shortcut is only a local demonstration.</li>
+        <li>Party B uses the agreed settings and trusted sender public key. Capture the verdict, hash match, signature result and extracted message. Export the verification log.</li>
+        <li>Use the Learning Objective short message, Project Overview large message, and your team's custom payload across your runs. Keep evidence of both PNG and WAV successes and failures.</li></ol>
+        <p>Capacity means usable embedding space, not the cover's disk size. The message plus metadata and signature must fit. Signing and hiding do not encrypt the message; a confidential label alone does not prove confidentiality.</p>
+      </details>
+    </section>
+
+    <section class="tamper-panel" aria-labelledby="tamper-title">
+      <div class="tamper-heading">
+        <div><p class="eyebrow">NEGATIVE-CASE TEST</p><h3 id="tamper-title">Test for tampering</h3></div>
+        <span id="tamper-state" class="tamper-state">No file loaded</span>
+      </div>
+      <p class="tamper-description">Change one bit in the received copy, then run Decode to check the result. Your saved file and original reference stay unchanged.</p>
+      <div class="tamper-actions">
+        <button type="button" class="btn tamper-action" id="btn-tamper-payload" disabled aria-describedby="tamper-help">Simulate tampering</button>
+        <button type="button" class="btn tamper-reset" id="btn-clear-tamper" disabled>Reset received copy</button>
+      </div>
+      <p id="tamper-help" class="tamper-help" role="status" aria-live="polite">Load a received stego file to enable this test.</p>
+    </section>
 
     <p class="section-label">🔐 Security settings — must match the encoder</p>
     <div class="field-grid">
@@ -207,7 +279,7 @@
       <button id="btn-decode-sync" class="btn btn-primary" disabled>🔎 Decode (Synchronous)</button>
       <button id="btn-decode-async" class="btn btn-primary" disabled>⏳ Decode (Asynchronous)</button>
     </div>
-    <div class="async-status" id="async-status" hidden></div>
+    <div class="async-status" id="async-status" role="status" aria-live="polite" hidden></div>
 
     <div class="result-panel" id="decode-result" hidden>
       <p class="section-label">✅ Result</p>
@@ -215,7 +287,7 @@
       <p id="verdict-detail"></p>
       <div class="kv-list" id="decode-result-kv"></div>
       <details open>
-        <summary>Extracted payload</summary>
+        <summary>Decoded payload</summary>
         <div id="extracted-payload"></div>
       </details>
       <details>
