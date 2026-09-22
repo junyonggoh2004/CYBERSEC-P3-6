@@ -1,1175 +1,343 @@
 "use strict";
-
-/* ------------------------------------------------------------------ *
- * Small shared helpers
- * ------------------------------------------------------------------ */
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => Array.from(document.querySelectorAll(sel));
-
-// Briefly swaps a button to a green "done" state with confirmation text, so
-// clicking a one-shot action (tamper, reset, decoy key, ...) is obviously
-// registered even when the main visible change happens elsewhere on the page.
-function flashButton(btn, doneText, holdMs = 1200) {
-  const originalText = btn.textContent;
-  const originalWidth = btn.offsetWidth;
-  btn.style.minWidth = `${originalWidth}px`;
-  btn.textContent = doneText;
-  btn.classList.add("btn-flash");
-  clearTimeout(btn._flashTimer);
-  btn._flashTimer = setTimeout(() => {
-    btn.textContent = originalText;
-    btn.classList.remove("btn-flash");
-    btn.style.minWidth = "";
-  }, holdMs);
+const $ = id => document.getElementById(id);
+const state = { keys: [], prepared: null, latest: null, received: null, pair: null, report: null, analysis: null, analysisFile: null, revision: 0, verifyRevision: 0, analysisRevision: 0, busy: false };
+const urls = new Map();
+const esc = value => String(value ?? "Unavailable").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const pretty = value => JSON.stringify(value, null, 2);
+const bytes = value => value < 1024 ? value + " B" : value < 1048576 ? (value / 1024).toFixed(1) + " KiB" : (value / 1048576).toFixed(1) + " MiB";
+const kindOf = file => file && (/\.png$/i.test(file.name) ? "image" : /\.wav$/i.test(file.name) ? "audio" : null);
+const fileLabel = file => file ? file.name + " · " + bytes(file.size) : "No file selected";
+function notice(message, error = false) { $("notice").textContent = message; $("notice").classList.toggle("error", error); $("notice").hidden = !message; }
+async function api(path, data) {
+  const response = await fetch(path, data ? { method: "POST", body: data } : {});
+  let result;
+  try { result = await response.json(); } catch (_) { throw new Error("The server did not return a readable response."); }
+  if (!response.ok || result.error) throw new Error(result.error || "Request failed (" + response.status + ").");
+  return result;
 }
-
-const QUICKFILL = {
-  short:
-    "Explain how steganography can be used to embed hidden verification data in image and audio cover objects.",
-  large:
-    "This undergraduate project requires student teams to design, implement and demonstrate a GUI-based LSB Replacement steganography program (window-based or web-based) that protects and verifies both image and audio cover objects using steganography, hashing and digital signatures. The project focuses on practical cybersecurity concepts: hiding a verification payload inside an image and an audio file, signing relevant verification data, extracting the hidden payload, checking the digital signature, and demonstrating positive and negative verification cases.",
-  custom:
-    "CONFIDENTIAL - Team P3-6 release note: this stego object certifies that the attached media was approved for release by the digital media verification team on this date. Do not redistribute without checking the embedded signature.",
-};
-
-function nowStr() {
-  return new Date().toLocaleTimeString();
-}
-
-function b64ToBytes(b64) {
-  const bin = atob(b64);
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return arr;
-}
-
-function bytesToB64(bytes) {
-  let bin = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
-  }
-  return btoa(bin);
-}
-
-function fileFromBytes(bytes, filename, mime) {
-  return new File([bytes], filename, { type: mime });
-}
-
-function humanBytes(n) {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(2)} MB`;
-}
-
-/* Shared preview ownership: replaced files must not leave object URLs alive. */
-const previewUrls = new Map();
-function releasePreviewUrl(slot) {
-  if (previewUrls.has(slot)) URL.revokeObjectURL(previewUrls.get(slot));
-  previewUrls.delete(slot);
-}
-function previewUrl(slot, bytes, mime = "") {
-  releasePreviewUrl(slot);
-  const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
-  previewUrls.set(slot, url);
-  return url;
-}
-window.addEventListener("pagehide", () => {
-  for (const slot of previewUrls.keys()) releasePreviewUrl(slot);
-});
-
-const comparisons = new Map();
-const fileReadTokens = {};
-let encodeRevision = 0;
-let encodeBusy = false;
-let decodeRevision = 0;
-let decodeBusy = false;
-function mediaDescriptor(bytes, name, kind, mime = "") {
-  return bytes ? { bytes, name: name || "Selected file", kind, mime } : null;
-}
-function fitComparisonImages(view) {
-  const loaded = view.images.filter(img => img.naturalWidth && img.naturalHeight);
-  if (!loaded.length) return;
-  // Use one pixels-to-CSS-pixels ratio for both images, including unlike dimensions.
-  const scale = Math.min(1, ...loaded.flatMap(img => [
-    (img.parentElement.clientWidth - 24) / img.naturalWidth,
-    (img.parentElement.clientHeight - 24) / img.naturalHeight,
-  ]));
-  loaded.forEach(img => {
-    img.style.width = `${Math.max(0, img.naturalWidth * scale)}px`;
-    img.style.height = `${Math.max(0, img.naturalHeight * scale)}px`;
-  });
-}
-function renderComparison(prefix, left, right) {
-  const previous = comparisons.get(prefix);
-  previous?.observer?.disconnect();
-  const grid = $(`#${prefix}-comparison-grid`);
-  const notice = $(`#${prefix}-comparison-note`);
-  grid.replaceChildren(); notice.textContent = "";
-  const view = { images: [], dimensions: [], failures: new Set(), observer: null };
-  comparisons.set(prefix, view);
-  const labels = prefix === "encode" ? ["Original cover", "Encoded stego object"] : ["Original reference", "Received stego object"];
-  function updateNotice() {
-    if (comparisons.get(prefix) !== view) return;
-    const notes = [];
-    if (left && right && left.kind !== right.kind) notes.push("The selected objects have different media types; choose a matching reference for comparison.");
-    if (view.dimensions[0] && view.dimensions[1] && view.dimensions[0] !== view.dimensions[1]) notes.push("Image dimensions differ. Both are shown at the same scale; the reference is for comparison only.");
-    notes.push(...view.failures);
-    notice.textContent = notes.join(" ");
-    fitComparisonImages(view);
-  }
-  [left, right].forEach((file, index) => {
-    const slot = `${prefix}-comparison-${index}`;
-    releasePreviewUrl(slot);
-    const figure = document.createElement("figure"); figure.className = "comparison-card";
-    const caption = document.createElement("figcaption"); caption.textContent = labels[index];
-    const stage = document.createElement("div"); stage.className = "comparison-stage";
-    const filename = document.createElement("p"); filename.className = "comparison-file";
-    const meta = document.createElement("p"); meta.className = "comparison-meta";
-    figure.append(caption, stage, filename, meta); grid.append(figure);
-    if (!file) {
-      const empty = document.createElement("p"); empty.className = "comparison-placeholder";
-      empty.textContent = prefix === "encode"
-        ? (index === 0 ? "Choose a cover to preview the original." : "Encode your payload to see the stego object here.")
-        : (index === 0 ? "Add an optional original reference. You can verify without it." : "Choose a received stego file to compare.");
-      stage.append(empty); filename.textContent = "No file selected"; meta.textContent = "—";
-      return;
-    }
-    filename.textContent = file.name;
-    meta.textContent = `${humanBytes(file.bytes.length)} · ${file.bytes.length.toLocaleString()} bytes`;
-    const kind = file.kind || "image";
-    const media = document.createElement(kind === "image" ? "img" : kind === "audio" ? "audio" : "video");
-    if (kind === "image") {
-      media.alt = `${labels[index]}: ${file.name}`; view.images.push(media);
-      media.onload = () => {
-        if (comparisons.get(prefix) !== view) return;
-        view.dimensions[index] = `${media.naturalWidth} × ${media.naturalHeight}`;
-        meta.textContent += ` · ${view.dimensions[index]} px`;
-        updateNotice();
-      };
-    } else {
-      media.controls = true; media.preload = "metadata";
-      media.setAttribute("aria-label", `${labels[index]} playback: ${file.name}`);
-      media.onloadedmetadata = () => {
-        if (comparisons.get(prefix) !== view) return;
-        if (Number.isFinite(media.duration)) meta.textContent += ` · ${media.duration.toFixed(2)} seconds`;
-      };
-    }
-    media.onerror = () => {
-      if (comparisons.get(prefix) !== view) return;
-      const error = document.createElement("p"); error.className = "comparison-placeholder";
-      error.textContent = "Preview unavailable. The file may be damaged or unsupported by this browser.";
-      stage.replaceChildren(error); view.images = view.images.filter(img => img !== media);
-      view.failures.add(`${labels[index]} cannot be previewed. Verification remains a separate check.`); updateNotice();
-    };
-    stage.append(media); media.src = previewUrl(slot, file.bytes, file.mime);
-  });
-  view.observer = new ResizeObserver(() => fitComparisonImages(view));
-  view.observer.observe(grid); updateNotice();
-}
-function currentCover() {
-  return mediaDescriptor(state.encode.coverBytes, state.encode.coverFilename, state.encode.coverType);
-}
-function refreshEncodeComparison() {
-  renderComparison("encode", currentCover(), null);
-  $("#encode-comparison-settings").textContent = state.encode.coverBytes
-    ? `${$("#encode-num-lsb").value} LSB(s) selected · payload ${humanBytes(estimatePayloadSize())}. Encode to compare the saved output.`
-    : "Choose a cover file to begin. The encoded object will appear alongside it.";
-}
-function invalidateEncodeResult() {
-  encodeRevision++;
-  lastStego = null;
-  $("#encode-result").hidden = true;
-  $("#encode-download-link").removeAttribute("href");
-  releasePreviewUrl("encode-download");
-  refreshEncodeComparison();
-}
-function refreshDecodeComparison() {
-  renderComparison("decode", state.decode.reference,
-    mediaDescriptor(state.decode.stegoBytes, state.decode.stegoFilename, state.decode.coverType));
-}
-function invalidateDecodeResult() {
-  decodeRevision++;
-  $("#demo-outcome").textContent = "";
-  $("#decode-result").hidden = true;
-  ["payload-media", "payload-download"].forEach(releasePreviewUrl);
-  refreshDecodeComparison();
-}
-
-/* ------------------------------------------------------------------ *
- * Verification log (evidence trail)
- * ------------------------------------------------------------------ */
-const logEntries = [];
-
-function addLog(action, coverType, verdict, ok, details) {
-  const entry = { time: new Date().toISOString(), action, coverType, verdict, ok: !!ok, details };
-  logEntries.push(entry);
-  const tbody = $("#log-body");
-  const tr = document.createElement("tr");
-  [nowStr(), action, coverType, verdict, details || ""].forEach((value, index) => {
-    const cell = document.createElement("td");
-    if (index === 3) {
-      const badge = document.createElement("span");
-      badge.className = `log-badge ${ok ? "ok" : "bad"}`;
-      badge.textContent = value;
-      cell.appendChild(badge);
-    } else cell.textContent = value;
-    tr.appendChild(cell);
-  });
-  tbody.prepend(tr);
-}
-
-$("#btn-clear-log").addEventListener("click", () => {
-  logEntries.length = 0;
-  $("#log-body").innerHTML = "";
-});
-
-$("#btn-export-log").addEventListener("click", () => {
-  const blob = new Blob([JSON.stringify(logEntries, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "verification_log.json";
-  a.click();
-  URL.revokeObjectURL(url);
-});
-
-/* ------------------------------------------------------------------ *
- * Key panel
- * ------------------------------------------------------------------ */
-async function loadPublicKey() {
-  try {
-    const res = await fetch("/api/keys/public");
-    const data = await res.json();
-    if (data.public_key_pem) {
-      $("#decode-public-key").value = data.public_key_pem;
-    invalidateDecodeResult();
-      $("#key-status").textContent = "Key pair ready.";
-    }
-  } catch (e) {
-    $("#key-status").textContent = "Could not reach backend - is app.py running?";
-  }
-}
-
-$("#btn-gen-keys").addEventListener("click", async (e) => {
-  const btn = e.currentTarget; // capture before the first await - the event object's
-  // currentTarget is reset to null once the handler yields control (classic DOM gotcha)
-  $("#key-status").textContent = "Generating…";
-  try {
-    const res = await fetch("/api/keys/generate", { method: "POST" });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    $("#decode-public-key").value = data.public_key_pem;
-    invalidateDecodeResult();
-    $("#key-status").textContent = "New key pair generated.";
-    addLog("Generate keys", "-", "OK", true, "New RSA-2048 key pair generated.");
-    flashButton(btn, "✅ Generated");
-  } catch (e2) {
-    $("#key-status").textContent = "Key generation failed.";
-  }
-});
-
-$("#btn-show-key").addEventListener("click", async () => {
-  const res = await fetch("/api/keys/public");
-  const data = await res.json();
-  $("#key-modal-content").textContent = data.public_key_pem || data.error;
-  $("#key-modal").hidden = false;
-});
-$("#key-modal-close").addEventListener("click", () => ($("#key-modal").hidden = true));
-
-/* ------------------------------------------------------------------ *
- * Cover-type detection - lets the dropzones accept any supported file and
- * figure out image/audio/video for themselves, instead of requiring the
- * user to click the right tab first. Tabs still work for manually forcing
- * a type, and stay in sync with whatever was auto-detected.
- * ------------------------------------------------------------------ */
-const EXT_TO_COVER_TYPE = {
-  png: "image", bmp: "image", jpg: "image", jpeg: "image",
-  wav: "audio",
-  mp4: "video", m4v: "video", mkv: "video", mov: "video", avi: "video", webm: "video",
-};
-const COVER_HINTS = {
-  image: "PNG image required for lossless embedding",
-  audio: "WAV/PCM (16-bit or 32-bit) required",
-  video: "Hides the payload in the video's audio track - needs an audio track; output is produced as .mkv",
-};
-
-// Extension first (fast, and what a user would expect from a file's name);
-// falls back to the browser-reported MIME type for extensionless/renamed
-// files. Returns null if neither gives a confident answer.
-function detectCoverType(file) {
-  const ext = (file.name.split(".").pop() || "").toLowerCase();
-  if (EXT_TO_COVER_TYPE[ext]) return EXT_TO_COVER_TYPE[ext];
+function run(handler) { return async event => { try { await handler(event); } catch (error) { notice(error.message, true); } }; }
+function table(headers, rows) { return '<table><thead><tr>' + headers.map(x => "<th>" + esc(x) + "</th>").join("") + "</tr></thead><tbody>" + rows.map(row => "<tr>" + row.map(x => "<td>" + esc(x) + "</td>").join("") + "</tr>").join("") + "</tbody></table>"; }
+function detailsTable(rows) { return '<table class="detail-table"><tbody>' + rows.map(([key,value]) => "<tr><th>" + esc(key) + "</th><td>" + esc(value) + "</td></tr>").join("") + "</tbody></table>"; }
+function metrics(id, items) { $(id).innerHTML = items.map(([name,value]) => '<div class="metric"><span>' + esc(name) + "</span><strong>" + esc(value) + "</strong></div>").join(""); }
+function objectURL(id, blob) { if (urls.has(id)) URL.revokeObjectURL(urls.get(id)); const url = URL.createObjectURL(blob); urls.set(id,url); return url; }
+function download(blob, filename) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(a.href),1000); }
+function exportJSON(value, filename) { download(new Blob([pretty(value)],{type:"application/json"}),filename); }
+function fromBase64(data, type, name) { const raw = atob(data); const buffer = Uint8Array.from(raw,c=>c.charCodeAt(0)); return new File([buffer],name,{type}); }
+async function preview(id, file, text) {
+  const el = $(id); el.replaceChildren();
+  if (text !== undefined) { const p = document.createElement("div"); p.className="content-text"; p.textContent=text; el.append(p); return; }
+  if (!file) { const p = document.createElement("p"); p.className="empty"; p.textContent="No object selected."; el.append(p); return; }
   const mime = file.type || "";
-  if (mime.startsWith("image/")) return "image";
-  if (mime.startsWith("audio/")) return "audio";
-  if (mime.startsWith("video/")) return "video";
-  return null;
+  if (/^image\/(png|jpeg|gif|webp)$/.test(mime) || /\.(png|jpe?g)$/i.test(file.name)) {
+    const img = document.createElement("img"); img.alt = file.name; img.src = objectURL(id,file); el.append(img);
+  } else if (mime.startsWith("audio/") || /\.(wav|mp3|ogg|flac|m4a)$/i.test(file.name)) {
+    const audio = document.createElement("audio"); audio.controls=true; audio.preload="metadata"; audio.src=objectURL(id,file); el.append(audio);
+  } else if (mime.startsWith("text/") && file.size < 100000) {
+    const p = document.createElement("div"); p.className="content-text"; p.textContent=await file.text(); el.append(p);
+  }
+  const caption = document.createElement("p"); caption.textContent=fileLabel(file); el.append(caption);
 }
-
-/* ------------------------------------------------------------------ *
- * Tab bars (cover type selection) - both clickable and settable from code
- * ------------------------------------------------------------------ */
-function setActiveTab(groupName, value) {
-  document
-    .querySelectorAll(`.tabbar[data-group="${groupName}"] .tab`)
-    .forEach((t) => t.classList.toggle("active", t.dataset.value === value));
+function navigate() {
+  const name = location.hash.slice(1) || "protect";
+  const page = $( "page-" + name ) ? name : "protect";
+  document.querySelectorAll(".page").forEach(el=>el.hidden=el.id!=="page-"+page);
+  document.querySelectorAll("[data-page]").forEach(el=>{ if(el.dataset.page===page)el.setAttribute("aria-current","page"); else el.removeAttribute("aria-current"); });
+  if(page==="compare") renderComparison();
 }
-
-function setupTabbar(groupName, onChange) {
-  const bar = document.querySelector(`.tabbar[data-group="${groupName}"]`);
-  const btns = Array.from(bar.querySelectorAll(".tab"));
-  btns.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      setActiveTab(groupName, btn.dataset.value);
-      onChange(btn.dataset.value);
-    });
-  });
-}
-
-const state = {
-  encode: { coverType: "image", coverBytes: null, coverFilename: null, payloadType: "text", payloadBytes: null, payloadFilename: null, payloadMime: null },
-  decode: { coverType: "image", stegoBytes: null, stegoBytesOriginal: null, stegoFilename: null, reference: null, modified: false },
+document.querySelectorAll("[data-go]").forEach(el=>el.onclick=()=>location.hash=el.dataset.go);
+window.addEventListener("hashchange",navigate);
+navigate();
+$("theme").onclick=()=>{
+  const theme=document.documentElement.dataset.theme==="dark"?"light":"dark";
+  document.documentElement.dataset.theme=theme;
+  $("theme").textContent=theme==="dark"?"Light theme":"Dark theme";
+  try { localStorage.setItem("stego-theme",theme); } catch (_) {}
+  if(state.pair?.measurements) drawComparison(state.pair.measurements);
 };
+$("theme").textContent=document.documentElement.dataset.theme==="dark"?"Light theme":"Dark theme";
 
-// Applying a cover type never touches an already-loaded file by itself -
-// callers decide whether to also clear/reset it (manual tab click: yes,
-// since the old file no longer matches; auto-detect-on-drop: no, since the
-// file *is* what set this type).
-function applyEncodeCoverType(v) {
-  state.encode.coverType = v;
-  $("#encode-cover-hint").textContent = COVER_HINTS[v];
+function selectedKey() { return state.keys.find(x=>x.key_id===$("signing-key").value); }
+function renderKey() {
+  const key=selectedKey(); if(!key)return;
+  $("selected-public").value=key.public_key_pem;
+  $("selected-fingerprint").textContent="SHA-256 public-key fingerprint: "+key.fingerprint;
+  $("key-status").textContent="Alice · RSA "+key.bits+" · "+key.fingerprint.slice(0,12)+"…";
 }
-function applyDecodeCoverType(v) {
-  state.decode.coverType = v;
+async function loadKeys(preferred) {
+  const result=await api("/api/keys"); state.keys=result.keys;
+  const selected=preferred || $("signing-key").value;
+  $("signing-key").replaceChildren(...state.keys.map((key,i)=>new Option((i===0?"Saved demo pair":"Additional pair")+" · "+key.fingerprint.slice(0,12),key.key_id)));
+  if(state.keys.some(key=>key.key_id===selected)) $("signing-key").value=selected;
+  $("key-list").innerHTML=table(["Pair","RSA size","SHA-256 public fingerprint"],state.keys.map((key,i)=>[i===0?"Saved demo": "Additional",key.bits,key.fingerprint]));
+  renderKey(); invalidate();
 }
-
-setupTabbar("encode-cover-type", (v) => {
-  applyEncodeCoverType(v);
-  state.encode.coverBytes = null;
-  state.encode.coverFilename = null;
-  resetDropzonePreview("encode-cover");
-  updateCapacity();
-  updateEncodeButtonState();
+$("signing-key").addEventListener("change",renderKey);
+$("generate-key").onclick=run(async()=>{
+  $("generate-key").disabled=true;
+  try { const key=await api("/api/keys/generate",new FormData()); await loadKeys(key.key_id); notice("Additional Alice key pair saved. Previous pairs remain available."); }
+  finally { $("generate-key").disabled=false; }
+});
+$("export-public").onclick=()=>{const key=selectedKey(); if(key)download(new Blob([key.public_key_pem],{type:"text/plain"}),"alice-"+key.fingerprint.slice(0,12)+".pem");};
+$("key-import-form").onsubmit=run(async e=>{
+  e.preventDefault(); const data=new FormData(); data.append("key_file",$("private-file").files[0]); data.append("password",$("key-password").value);
+  const key=await api("/api/keys/import",data); $("key-password").value=""; $("private-file").value=""; await loadKeys(key.key_id); notice("Signing pair imported and retained.");
 });
 
-setupTabbar("decode-cover-type", (v) => {
-  applyDecodeCoverType(v);
-  clearDecodeStego();
-  resetDropzonePreview("decode-stego");
-});
-
-/* ------------------------------------------------------------------ *
- * Generic drag-and-drop wiring
- * ------------------------------------------------------------------ */
-function setupDropzone(dzId, inputId, onFile) {
-  const dz = document.getElementById(dzId);
-  const input = document.getElementById(inputId);
-
-  dz.addEventListener("click", (e) => {
-    if (e.target === input || e.target.closest(".dz-preview")) return;
-    input.click();
-  });
-  dz.tabIndex = 0;
-  dz.setAttribute("role", "button");
-  dz.setAttribute("aria-label", inputId === "decode-reference-input" ? "Choose optional original reference" : inputId === "decode-stego-input" ? "Choose received stego file" : inputId === "encode-cover-input" ? "Choose cover file" : "Choose payload file");
-  dz.addEventListener("keydown", (e) => {
-    if (e.target === dz && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); input.click(); }
-  });
-  input.addEventListener("change", () => {
-    if (input.files[0]) onFile(input.files[0]);
-  });
-  ["dragenter", "dragover"].forEach((evt) =>
-    dz.addEventListener(evt, (e) => {
-      e.preventDefault();
-      dz.classList.add("dragover");
-    })
-  );
-  ["dragleave", "drop"].forEach((evt) =>
-    dz.addEventListener(evt, (e) => {
-      e.preventDefault();
-      dz.classList.remove("dragover");
-    })
-  );
-  dz.addEventListener("drop", (e) => {
-    const file = e.dataTransfer.files[0];
-    if (file) onFile(file);
-  });
+function updateBits() {
+  const depth=Number($("lsb").value);
+  $("bits").innerHTML=Array.from("10110110",(bit,i)=>'<span class="bit '+(i>=8-depth?"selected":"")+'">'+bit+"</span>").join("");
+  $("bit-explanation").textContent=depth+" lowest bit"+(depth===1?"":"s")+" replaced per value. Example: 100 available values × "+depth+" = "+(100*depth)+" bits. A 240-bit package "+(100*depth>=240?"fits.":"does not fit.");
+  $("scope-note").textContent="Stable-cover hashing excludes these low bits. Start-location derivation uses SHA-256 regardless of the content-hash selection."+ (depth===8&&kindOf($("cover-file").files[0])!=="audio"?" At 8 LSBs, no image-channel value bits remain protected by the stable hash.":"");
 }
-
-function resetDropzonePreview(prefix) {
-  fileReadTokens[prefix] = (fileReadTokens[prefix] || 0) + 1;
-  releasePreviewUrl(`dropzone-${prefix}`);
-  document.getElementById(`${prefix}-input`).value = "";
-  document.getElementById(`${prefix}-preview`).hidden = true;
-  document.getElementById(`${prefix}-preview`).innerHTML = "";
-  document.querySelector(`#${prefix}-drop .dz-placeholder`).hidden = false;
+function updateContent() {
+  const cover=kindOf($("cover-file").files[0]) || "image";
+  const old=$("payload-type").value;
+  const other=cover==="image"?"audio":"image";
+  $("payload-type").replaceChildren(new Option("Text message","text"),new Option(other==="audio"?"Audio file inside image":"Image file inside audio",other));
+  if(old===other)$("payload-type").value=old;
+  updatePayloadMode(); updateBits();
 }
-
-// prefix must match: `${prefix}-drop` (dropzone), `${prefix}-preview`, `${prefix}-input` (file input)
-// `onRemove` is called when the user clicks "Remove" - it should clear whatever
-// app state held this file. Clicking "Change" always just reopens the file
-// picker for the same input, so a new drop/pick fires onFile() again.
-function renderFilePreview(prefix, file, bytes, onRemove) {
-  const placeholder = document.querySelector(`#${prefix}-drop .dz-placeholder`);
-  const preview = document.getElementById(`${prefix}-preview`);
-  const input = document.getElementById(`${prefix}-input`);
-  preview.innerHTML = "";
-  placeholder.hidden = true;
-  preview.hidden = false;
-
-  const mime = file.type || "";
-  const blobUrl = previewUrl(`dropzone-${prefix}`, bytes, mime);
-  if (mime.startsWith("image/") || /\.(png|jpe?g|bmp)$/i.test(file.name)) {
-    const img = document.createElement("img");
-    img.alt = file.name;
-    img.src = blobUrl;
-    preview.appendChild(img);
-  } else if (mime.startsWith("video/") || /\.(mp4|m4v|mkv|mov|avi|webm)$/i.test(file.name)) {
-    const video = document.createElement("video");
-    video.controls = true;
-    video.style.maxHeight = "160px";
-    video.style.maxWidth = "100%";
-    video.src = blobUrl;
-    preview.appendChild(video);
-  } else if (mime.startsWith("audio/") || /\.(wav|mp3)$/i.test(file.name)) {
-    const audio = document.createElement("audio");
-    audio.controls = true;
-    audio.src = blobUrl;
-    preview.appendChild(audio);
-  }
-  const label = document.createElement("div");
-  label.className = "dz-filename";
-  label.textContent = `📄 ${file.name} (${humanBytes(bytes.length)})`;
-  preview.appendChild(label);
-
-  const toolbar = document.createElement("div");
-  toolbar.className = "dz-toolbar";
-  const changeBtn = document.createElement("button");
-  changeBtn.type = "button";
-  changeBtn.className = "btn btn-small";
-  changeBtn.textContent = "🔄 Change file";
-  changeBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (input) input.click();
-  });
-  toolbar.appendChild(changeBtn);
-
-  if (onRemove) {
-    const removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.className = "btn btn-small btn-warn";
-    removeBtn.textContent = "✕ Remove";
-    removeBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      resetDropzonePreview(prefix);
-      onRemove();
-    });
-    toolbar.appendChild(removeBtn);
-  }
-  preview.appendChild(toolbar);
-  if (prefix === "decode-stego") invalidateDecodeResult();
+function updatePayloadMode() {
+  const text=$("payload-type").value==="text";
+  $("text-content").hidden=!text; $("file-content").hidden=text; $("payload-preview").hidden=text;
+  $("payload-text").required=text; $("payload-file").required=!text;
+  $("payload-file").accept=$("payload-type").value==="audio"?"audio/*":"image/png,image/jpeg,image/webp";
 }
-
-/* ---- Encode: cover dropzone (accepts any supported file, auto-detects type) ---- */
-setupDropzone("encode-cover-drop", "encode-cover-input", async (file) => {
-  const selection = fileReadTokens["encode-cover"] = (fileReadTokens["encode-cover"] || 0) + 1;
-  state.encode.coverBytes = null; updateCapacity(); updateEncodeButtonState();
-  const detected = detectCoverType(file);
-  if (detected) {
-    setActiveTab("encode-cover-type", detected);
-    applyEncodeCoverType(detected);
-  } // else: unrecognised file - keep whatever tab is currently selected, let the server explain if it's wrong
-
-  const buf = new Uint8Array(await file.arrayBuffer());
-  if (selection !== fileReadTokens["encode-cover"]) return;
-  state.encode.coverBytes = buf;
-  state.encode.coverFilename = file.name;
-  renderFilePreview("encode-cover", file, buf, () => {
-    state.encode.coverBytes = null;
-    state.encode.coverFilename = null;
-    updateCapacity();
-    updateEncodeButtonState();
-  });
-  updateCapacity();
-  updateEncodeButtonState();
-});
-
-/* ---- Encode: payload file dropzone (for file/audio payload types) ---- */
-setupDropzone("encode-payload-file-drop", "encode-payload-file-input", async (file) => {
-  const selection = fileReadTokens["encode-payload-file"] = (fileReadTokens["encode-payload-file"] || 0) + 1;
-  state.encode.payloadBytes = null; updateCapacity(); updateEncodeButtonState();
-  const buf = new Uint8Array(await file.arrayBuffer());
-  if (selection !== fileReadTokens["encode-payload-file"]) return;
-  state.encode.payloadBytes = buf;
-  state.encode.payloadFilename = file.name;
-  state.encode.payloadMime = file.type || "application/octet-stream";
-  renderFilePreview("encode-payload-file", file, buf, () => {
-    state.encode.payloadBytes = null;
-    state.encode.payloadFilename = null;
-    state.encode.payloadMime = null;
-    updateCapacity();
-    updateEncodeButtonState();
-  });
-  updateCapacity();
-  updateEncodeButtonState();
-});
-
-/* ---- Decode: stego dropzone ---- */
-function clearDecodeStego() {
-  state.decode.stegoBytes = null;
-  state.decode.stegoBytesOriginal = null;
-  state.decode.stegoFilename = null;
-  invalidateDecodeResult();
-  updateDecodeButtonState();
+function updateStart(prefix="") {
+  const mode=$(prefix?"verify-mode":"start-mode").value;
+  $(prefix?"verify-offset-field":"offset-field").hidden=mode!=="manual";
+  $(prefix?"verify-secret-field":"secret-field").hidden=mode!=="passphrase";
+  if(!prefix) { $("secret").required=mode==="passphrase"; $("offset").required=mode==="manual"; }
 }
-
-// Accepts any supported stego file and auto-detects image/audio/video.
-setupDropzone("decode-stego-drop", "decode-stego-input", async (file) => {
-  const selection = fileReadTokens["decode-stego"] = (fileReadTokens["decode-stego"] || 0) + 1;
-  state.decode.stegoBytes = null; invalidateDecodeResult(); updateDecodeButtonState();
-  const detected = detectCoverType(file);
-  if (detected) {
-    setActiveTab("decode-cover-type", detected);
-    applyDecodeCoverType(detected);
-  }
-
-  const buf = new Uint8Array(await file.arrayBuffer());
-  if (selection !== fileReadTokens["decode-stego"]) return;
-  state.decode.stegoBytes = buf;
-  state.decode.stegoBytesOriginal = buf.slice();
-  state.decode.modified = false;
-  state.decode.stegoFilename = file.name;
-  renderFilePreview("decode-stego", file, buf, clearDecodeStego);
-  updateDecodeButtonState();
-});
-
-setupDropzone("decode-reference-drop", "decode-reference-input", async (file) => {
-  const selection = fileReadTokens["decode-reference"] = (fileReadTokens["decode-reference"] || 0) + 1;
-  state.decode.reference = null;
-  refreshDecodeComparison();
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  if (selection !== fileReadTokens["decode-reference"]) return;
-  state.decode.reference = mediaDescriptor(bytes, file.name, detectCoverType(file), file.type);
-  renderFilePreview("decode-reference", file, bytes, () => {
-    state.decode.reference = null;
-    refreshDecodeComparison();
-  });
-  refreshDecodeComparison();
-});
-
-/* ------------------------------------------------------------------ *
- * Payload type switching
- * ------------------------------------------------------------------ */
-$("#encode-payload-type").addEventListener("change", (e) => {
-  state.encode.payloadType = e.target.value;
-  const isText = e.target.value === "text";
-  $("#payload-text-block").hidden = !isText;
-  $("#encode-payload-file-drop").hidden = isText;
-  $("#encode-payload-file-input").accept = e.target.value === "audio" ? ".mp3,.wav,audio/*" : "";
-  updateCapacity();
-  updateEncodeButtonState();
-});
-
-$$('[data-fill]').forEach((btn) =>
-  btn.addEventListener("click", () => {
-    $("#encode-payload-text").value = QUICKFILL[btn.dataset.fill];
-    updateCapacity();
-    updateEncodeButtonState();
-  })
-);
-$("#encode-payload-text").addEventListener("input", () => {
-  updateCapacity();
-  updateEncodeButtonState();
-});
-
-/* ------------------------------------------------------------------ *
- * LSB sliders + start-location mode toggles
- * ------------------------------------------------------------------ */
-function wireSlider(sliderId, outId, onChange) {
-  const slider = document.getElementById(sliderId);
-  const out = document.getElementById(outId);
-  slider.addEventListener("input", () => {
-    out.textContent = slider.value;
-    onChange();
-  });
+$("cover-file").addEventListener("change",run(async()=>{
+  const file=$("cover-file").files[0];
+  if(file&&!kindOf(file))throw new Error("Choose a PNG image or WAV audio cover.");
+  updateContent(); await preview("cover-preview",file);
+}));
+$("payload-type").addEventListener("change",updatePayloadMode);
+$("payload-file").addEventListener("change",()=>preview("payload-preview",$("payload-file").files[0]));
+$("lsb").addEventListener("change",updateBits);
+$("start-mode").addEventListener("change",()=>updateStart());
+$("verify-mode").addEventListener("change",()=>updateStart("verify"));
+$("short-text").onclick=()=>{ $("payload-text").value="Explain how steganography can be used to embed hidden verification data in image and audio cover objects."; invalidate(); };
+$("long-text").onclick=()=>{ $("payload-text").value="This undergraduate project requires student teams to design, implement and demonstrate a GUI-based LSB Replacement steganography program (window-based or web-based) that protects and verifies both image and audio cover objects using steganography, hashing and digital signatures. The project focuses on practical cybersecurity concepts: hiding a verification payload inside an image and an audio file, signing relevant verification data, extracting the hidden payload, checking the digital signature, and demonstrating positive and negative verification cases. Video as a cover object is not required for the main assignment, but may be attempted as an optional challenge."; invalidate(); };
+function protectData() {
+  const form=new FormData($("protect-form"));
+  const kind=kindOf($("cover-file").files[0]);
+  if(!kind) throw new Error("Choose a PNG or WAV cover.");
+  form.set("cover_type",kind);
+  if($("start-mode").value==="manual") form.delete("passphrase");
+  else form.delete("manual_offset");
+  return form;
 }
-wireSlider("encode-num-lsb", "encode-num-lsb-out", updateCapacity);
-wireSlider("decode-num-lsb", "decode-num-lsb-out", () => {});
-
-function wireStartMode(prefix, onChange) {
-  const select = document.getElementById(`${prefix}-start-mode`);
-  select.addEventListener("change", () => {
-    const isManual = select.value === "manual";
-    document.getElementById(`${prefix}-offset-field`).hidden = !isManual;
-    document.getElementById(`${prefix}-passphrase-field`).hidden = isManual;
-    onChange();
-  });
+function ready() { return $("cover-file").files[0] && selectedKey() && ($("payload-type").value==="text"?$("payload-text").value:$("payload-file").files[0]) && ($("start-mode").value!=="passphrase"||$("secret").value); }
+let reviewTimer;
+function invalidate() {
+  state.revision++; state.prepared=null; $("protect-button").disabled=true;
+  $("record-preview").textContent="Settings changed. Review again to create a current draft.";
+  $("capacity-metrics").replaceChildren(); $("capacity-bar").value=0; $("embedding-details").textContent="No current measurements.";
+  $("prepare-status").textContent=ready()?"Calculating capacity…":"Choose a cover and content to calculate the complete package size.";
+  clearTimeout(reviewTimer);
+  if(ready())reviewTimer=setTimeout(()=>prepare().catch(error=>{$("prepare-status").textContent=error.message;}),500);
 }
-wireStartMode("encode", updateCapacity);
-wireStartMode("decode", () => {});
-$("#encode-offset").addEventListener("input", updateCapacity);
-$("#encode-passphrase").addEventListener("input", updateCapacity);
-
-/* ------------------------------------------------------------------ *
- * Live capacity check (encode side)
- * ------------------------------------------------------------------ */
-let capacityTimer = null;
-function updateCapacity() {
-  invalidateEncodeResult();
-  clearTimeout(capacityTimer);
-  capacityTimer = setTimeout(doCapacityCheck, 250);
+$("protect-form").addEventListener("input",invalidate);
+$("protect-form").addEventListener("change",invalidate);
+async function prepare() {
+  clearTimeout(reviewTimer);
+  const revision=state.revision;
+  const result=await api("/api/prepare",protectData());
+  if(revision!==state.revision)return;
+  state.prepared=result;
+  $("protect-button").disabled=!result.fits||state.busy;
+  $("prepare-status").textContent=result.fits?"The complete signed package fits. Your LSB selection will be used unchanged.":"The complete package does not fit. Increase depth, reduce content, change cover or adjust the start location.";
+  metrics("capacity-metrics",[["Content",bytes(result.content_size_bytes)],["Complete package",bytes(result.container_size_bytes)],["Available",bytes(result.capacity_bytes)],["Space used",result.utilisation_percent+"%"],["Minimum sufficient depth",result.minimum_sufficient_depth ?? "Does not fit at 1–8"]]);
+  $("capacity-bar").value=Math.min(100,result.utilisation_percent);
+  $("cover-properties").textContent=Object.entries(result.cover_info).map(([k,v])=>k.replaceAll("_"," ")+": "+v).join(" · ");
+  $("record-preview").textContent=pretty({record:result.metadata,payload_hash:result.payload_hash_hex,signature:result.signature_hex});
+  $("embedding-details").innerHTML=detailsTable([["Start index",result.start_index],["Carrier unit",kindOf($("cover-file").files[0])==="image"?"Image channel value (row-major)":"PCM sample (interleaved)"],["Metadata/signature/header overhead",bytes(result.overhead_bytes)],["Field padding",result.padding_bits+" bits"],["Location security","An offset can be searched. A passphrase derives an offset; it does not encrypt the content."]])+table(["LSBs","Start","Available bytes","Required units","Fit"],result.choices.map(c=>[c.num_lsb,c.start_index,c.capacity_bytes,c.required_units,c.fits?"Yes":"No"]));
 }
-
-async function doCapacityCheck() {
-  const bar = $("#encode-capacity-text");
-  const fill = $("#encode-capacity-fill");
-  if (!state.encode.coverBytes) {
-    bar.textContent = "Load a cover file to see capacity…";
-    fill.style.width = "0%";
-    return;
-  }
-  const revision = encodeRevision;
-  const fd = new FormData();
-  fd.append("cover_type", state.encode.coverType);
-  fd.append("num_lsb", $("#encode-num-lsb").value);
-  fd.append("start_mode", $("#encode-start-mode").value);
-  fd.append("manual_offset", $("#encode-offset").value || 0);
-  fd.append("passphrase", $("#encode-passphrase").value || "");
-  fd.append("cover_file", fileFromBytes(state.encode.coverBytes, state.encode.coverFilename || "cover", ""));
-
+$("review").onclick=run(prepare);
+$("protect-form").onsubmit=run(async e=>{
+  e.preventDefault(); if(!state.prepared?.fits)throw new Error("Review capacity before creating the stego file.");
+  const data=protectData(), cover=$("cover-file").files[0], content=$("payload-type").value==="text"?new File([$("payload-text").value],"message.txt",{type:"text/plain"}):$("payload-file").files[0];
+  const settings={num_lsb:$("lsb").value,start_mode:$("start-mode").value,manual_offset:$("offset").value,passphrase:$("secret").value,cover_type:kindOf(cover)};
+  state.busy=true; $("protect-button").disabled=true; $("prepare-status").textContent="Hashing, signing and embedding…";
   try {
-    const res = await fetch("/api/capacity", { method: "POST", body: fd });
-    const data = await res.json();
-    if (revision !== encodeRevision) return;
-    if (data.error) {
-      bar.textContent = `⚠️ ${data.error}`;
-      fill.style.width = "100%";
-      fill.classList.add("over");
-      updateEncodeButtonState(false);
-      return;
+    const result=await api("/api/encode",data);
+    const file=fromBase64(result.stego_base64,result.mime,result.stego_filename);
+    state.latest={file,cover,content,result,settings};
+    $("created").hidden=false; await preview("stego-preview",file);
+    $("created-info").textContent=bytes(result.container_size_bytes)+" signed package · "+result.num_lsb+" LSBs · "+result.metadata.hash_algorithm+" · Start "+result.start_index;
+    $("final-record").textContent=pretty({record:result.metadata,payload_hash:result.payload_hash_hex,signature:result.signature_hex});
+    $("analyse-created").disabled=settings.cover_type!=="image";
+    $("prepare-status").textContent="Stego file created. Review or download the output below.";
+    notice("Created the stego object. Alice's private key was used for signing only.");
+    setLatestPair();
+  } finally { state.busy=false; $("protect-button").disabled=!state.prepared?.fits; }
+});
+$("download-stego").onclick=()=>{if(state.latest)download(state.latest.file,state.latest.file.name);};
+function useForVerify(file) {
+  if(!state.latest)throw new Error("Protect a file first.");
+  state.received=file||state.latest.file; $("received-file").required=false;
+  $("received-file").value=""; const settings=state.latest.settings;
+  $("verify-lsb").value=settings.num_lsb; $("verify-mode").value=settings.start_mode;
+  $("verify-offset").value=settings.manual_offset; $("verify-secret").value=settings.passphrase;
+  updateStart("verify"); preview("received-preview",state.received); invalidateVerification();
+  location.hash="verify";
+  notice("Local demo file loaded. Select Alice's trusted public key, then verify.");
+}
+function invalidateVerification() { state.verifyRevision++; $("verdict-card").hidden=true; state.report=null; $("verify-status").textContent="Inputs changed. Run verification for a current result."; }
+$("verify-form").addEventListener("input",invalidateVerification);
+$("verify-form").addEventListener("change",invalidateVerification);
+$("use-for-verify").onclick=run(()=>useForVerify());
+$("restore-stego").onclick=run(()=>{useForVerify(); $("tamper-status").textContent="Restored the original stego output.";});
+$("received-file").addEventListener("change",()=>{state.received=$("received-file").files[0]; preview("received-preview",state.received); $("verdict-card").hidden=true;});
+$("use-public").onclick=()=>{const key=selectedKey();if(key){$("verify-public").value=key.public_key_pem;invalidateVerification();notice("Selected demo public key loaded: "+key.fingerprint.slice(0,16)+"…");}};
+$("public-file").onchange=run(async()=>{if($("public-file").files[0]){$("verify-public").value=await $("public-file").files[0].text();invalidateVerification();}});
+$("decoy-public").onclick=run(async()=>{$("verify-public").value=(await api("/api/keys/decoy",new FormData())).public_key_pem;invalidateVerification();notice("Wrong public key loaded for a negative verification case.");});
+function renderVerdict(result) {
+  state.report=result; const ev=result.evidence;
+  $("verdict-card").hidden=false; $("verdict-title").textContent=result.verdict;
+  $("verdict-title").className=result.verdict==="Authentic"?"passed":"failed";
+  $("reason-code").textContent=ev.reason_code; $("verdict-explanation").textContent=result.detail;
+  $("check-list").innerHTML=Object.entries(ev.checks).map(([name,status])=>'<div class="check"><span>'+esc(name.replaceAll("_"," "))+'</span><strong class="'+(status==="Passed"?"passed":status==="Failed"?"failed":"")+'">'+esc(status)+"</strong></div>").join("");
+  const meta=result.metadata||{};
+  $("verdict-metadata").innerHTML=detailsTable([["File",ev.filename||state.received?.name],["Media type / file size",ev.cover_type+" / "+bytes(ev.file_size_bytes)],["Verification time",ev.verified_at],["Elapsed",ev.elapsed_ms+" ms"],["LSB depth / start method",ev.num_lsb+" / "+ev.start_mode],["Start index",ev.start_index],["Carrier unit / traversal",ev.carrier_unit+" / "+ev.traversal],["Media ID",meta.media_id],["Record timestamp",meta.timestamp],["Nonce",meta.nonce],["Content type / size",meta.mime?meta.mime+" / "+(meta.content_size_bytes??"Unavailable")+" bytes":null],["Hash algorithm",ev.hash_algorithm],["Signature algorithm",ev.signature_algorithm],["Supplied key fingerprint",ev.key_fingerprint],["Record trust",ev.record_trust]]);
+  $("verdict-scope").textContent=ev.scope; $("verdict-next").textContent=ev.next_step;
+  $("record-trust").textContent="Record: "+ev.record_trust+". Hash equality alone does not authenticate an unverified reference.";
+  $("verify-record").textContent=pretty({record:result.metadata,expected_payload_hash:ev.expected_payload_hash,recomputed_payload_hash:ev.actual_payload_hash,expected_cover_hash:ev.expected_cover_hash,recomputed_cover_hash:ev.actual_cover_hash,signature:ev.signature_hex});
+  $("download-content").disabled=!result.data_base64;
+  if(result.data_base64) {
+    state.recovered=fromBase64(result.data_base64,result.data_mime||"application/octet-stream",result.data_filename||"recovered-message.txt");
+    preview("recovered-preview",state.recovered);
+  } else {state.recovered=null; $("recovered-preview").textContent="Recovered content unavailable: extraction or verification could not complete.";}
+}
+$("verify-form").onsubmit=run(async e=>{
+  e.preventDefault(); if(!state.received)throw new Error("Choose a received PNG or WAV file.");
+  const kind=kindOf(state.received); if(!kind)throw new Error("Choose a PNG or WAV.");
+  const data=new FormData(); data.append("stego_file",state.received); data.append("cover_type",kind);
+  data.append("num_lsb",$("verify-lsb").value); data.append("start_mode",$("verify-mode").value);
+  data.append("manual_offset",$("verify-offset").value); data.append("passphrase",$("verify-secret").value);
+  data.append("public_key_pem",$("verify-public").value);
+  const revision=state.verifyRevision;
+  $("verify-button").disabled=true; $("verdict-card").hidden=true;
+  $("verify-status").textContent="Extracting the package, checking the signature and comparing hashes…";
+  try { const result=await api("/api/decode",data); if(revision!==state.verifyRevision)return; renderVerdict(result); $("verify-status").textContent="Verification completed. See the evidence for each check below."; }
+  catch(error){$("verify-status").textContent="Verification request failed: "+error.message;throw error;}
+  finally{$("verify-button").disabled=false;}
+});
+$("download-content").onclick=()=>{if(state.recovered)download(state.recovered,state.recovered.name);};
+$("download-report").onclick=()=>{if(state.report){const {data_base64,...report}=state.report;exportJSON(report,"verification-report.json");}};
+async function tamper(mode) {
+  if(!state.latest)throw new Error("Protect a file first.");
+  const data=new FormData(); data.append("stego_file",state.latest.file);
+  Object.entries(state.latest.settings).forEach(([key,value])=>data.append(key,value));
+  data.append("tamper_mode",mode);
+  const result=await api("/api/demo/tamper",data);
+  useForVerify(fromBase64(result.stego_base64,state.latest.file.type,"modified-"+state.latest.file.name));
+  $("tamper-status").textContent=result.detail;
+}
+$("tamper-content").onclick=run(()=>tamper("payload"));
+$("tamper-cover").onclick=run(()=>tamper("cover"));
+
+function setLatestPair() {
+  if(!state.latest)return;
+  state.pair={before:state.latest.cover,after:state.latest.file,content:state.latest.content,measurements:null};
+}
+async function renderComparison() {
+  if(!state.pair)return;
+  await Promise.all([preview("compare-before",state.pair.before),preview("compare-after",state.pair.after),preview("compare-payload",state.pair.content)]);
+  if(!state.pair.content)$("compare-payload").textContent="Hidden content is unknown for an independently uploaded pair. Extract it on Verify.";
+  $("comparison-results").hidden=!state.pair.measurements;
+  if(state.pair.measurements)drawComparison(state.pair.measurements);
+}
+$("compare-latest").onclick=run(async()=>{if(!state.latest)throw new Error("Protect a file first.");setLatestPair();$("compare-original").value="";$("compare-stego").value="";await renderComparison();await compare();});
+$("compare-original").onchange=()=>{state.pair={before:$("compare-original").files[0],after:$("compare-stego").files[0],content:null};renderComparison();};
+$("compare-stego").onchange=$("compare-original").onchange;
+async function compare() {
+  if(!state.pair?.before||!state.pair?.after)throw new Error("Choose both the original and stego object, or load the last protected pair.");
+  const pair=state.pair, kind=kindOf(pair.before);
+  if(!kind||kind!==kindOf(pair.after))throw new Error("Both objects must be PNGs, or both WAVs.");
+  const data=new FormData();data.append("cover_type",kind);data.append("original_file",pair.before);data.append("stego_file",pair.after);
+  $("compare-button").disabled=true; $("compare-status").textContent="Measuring changes…";
+  try {pair.measurements=await api("/api/compare",data);if(state.pair!==pair)return;await renderComparison();$("compare-status").textContent=fileLabel(pair.before)+" → "+fileLabel(pair.after);}
+  catch(error){$("compare-status").textContent=error.message;throw error;}
+  finally{$("compare-button").disabled=false;}
+}
+$("compare-button").onclick=run(compare);
+$("compare-zoom").oninput=()=>document.querySelectorAll("#compare-before img,#compare-after img").forEach(img=>img.style.transform="scale("+$("compare-zoom").value+")");
+function chart(parent,title,series,labels,maxY=null,minY=0) {
+  const container=document.createElement("div");container.className="chart-container";
+  const heading=document.createElement("p");heading.textContent=title;container.append(heading);
+  const canvas=document.createElement("canvas");canvas.width=760;canvas.height=260;canvas.setAttribute("role","img");canvas.setAttribute("aria-label",title+". "+labels);container.append(canvas);parent.append(container);
+  const c=canvas.getContext("2d"), left=65, top=24, width=670, height=190;
+  const ink=getComputedStyle(document.documentElement).getPropertyValue("--text-dim").trim();
+  c.font="16px Segoe UI";c.fillStyle=ink;c.strokeStyle=ink;c.lineWidth=1;
+  const values=series.flatMap(s=>s.values), max=maxY??Math.max(1,...values), span=max-minY||1;
+  c.beginPath();c.moveTo(left,top);c.lineTo(left,top+height);c.lineTo(left+width,top+height);c.stroke();
+  c.fillText(max.toFixed(max>10?0:2),4,top+8);c.fillText(String(minY),8,top+height);c.fillText(labels,left,250);
+  for(const [index,s] of series.entries()) {
+    c.strokeStyle=s.color||["#365ccc","#d46a12"][index%2];c.lineWidth=2;c.setLineDash(index%2?[8,5]:[]);
+    c.beginPath();s.values.forEach((v,i)=>{const x=left+i/(s.values.length-1||1)*width,y=top+height-(v-minY)/span*height;if(i)c.lineTo(x,y);else c.moveTo(x,y);});c.stroke();
+  }
+}
+function drawComparison(result) {
+  $("comparison-results").hidden=false;
+  metrics("comparison-metrics",[["Changed values",result.changed_percent+"%"],["Max difference",result.max_absolute_difference],["Mean squared error",result.mse.toPrecision(4)],["PSNR",result.psnr_db===null?"Identical":result.psnr_db.toFixed(2)+" dB"]]);
+  $("histograms").hidden=!result.histograms; $("waveforms").hidden=!result.waveforms; $("difference-panel").hidden=!result.histograms; $("zoom-field").hidden=!result.histograms;
+  $("histogram-charts").replaceChildren();$("waveform-charts").replaceChildren();
+  if(result.histograms) {
+    Object.entries(result.histograms).forEach(([name,h])=>chart($("histogram-charts"),name+" channel",[{values:h.before},{values:h.after}],"Intensity 0 → 255 · y = value count"));
+    $("difference-image").src="data:image/png;base64,"+result.difference_png_base64;
+    $("difference-caption").textContent="Absolute RGB differences amplified "+result.difference_gain.toFixed(1)+"× for visibility; this is not the actual stego appearance.";
+  }
+  if(result.waveforms) {
+    for(const [key,label] of [["before","Original"],["after","Stego"],["difference","Sample difference"]]) {
+      const values=result.waveforms[key].flat();
+      chart($("waveform-charts"),label,[{values}], "Time 0 → "+result.cover_info.duration_seconds+" seconds · channel 1",1,-1);
     }
-    const payloadSize = estimatePayloadSize();
-    const overheadEstimate = 64 + payloadSize; // rough container header overhead for the live bar
-    const fits = overheadEstimate <= data.capacity_bytes;
-    bar.textContent =
-      `Capacity from start location: ${humanBytes(data.capacity_bytes)} · ` +
-      `Payload (+header): ~${humanBytes(overheadEstimate)} · ` +
-      (fits ? "✅ fits" : "❌ too large for this cover/start-location/LSB combination");
-    const pct = Math.min(100, (overheadEstimate / Math.max(1, data.capacity_bytes)) * 100);
-    fill.style.width = `${pct}%`;
-    fill.classList.toggle("over", !fits);
-    updateEncodeButtonState(fits);
-  } catch (e) {
-    if (revision === encodeRevision) bar.textContent = "Could not check capacity (backend unreachable?).";
   }
+  const {difference_png_base64,...readable}=result;$("comparison-data").textContent=pretty(readable);
 }
 
-function estimatePayloadSize() {
-  if (state.encode.payloadType === "text") {
-    return new Blob([$("#encode-payload-text").value]).size;
-  }
-  return state.encode.payloadBytes ? state.encode.payloadBytes.length : 0;
+$("analysis-file").onchange=()=>{state.analysisFile=$("analysis-file").files[0];preview("analysis-preview",state.analysisFile);clearAnalysis();};
+function clearAnalysis() {
+  state.analysisRevision++;
+  state.analysis=null;$("analysis-export").disabled=true;
+  $("chi-results").textContent="Run analysis to see measurements.";$("rs-results").textContent="Run analysis to see measurements.";
+  $("analysis-conclusion").textContent="No current results.";$("analysis-data").textContent="No report yet.";
 }
-
-function updateEncodeButtonState(fitsOverride) {
-  const hasCover = !!state.encode.coverBytes;
-  const hasPayload =
-    state.encode.payloadType === "text"
-      ? $("#encode-payload-text").value.trim().length > 0
-      : !!state.encode.payloadBytes;
-  $("#btn-encode").disabled = encodeBusy || !(hasCover && hasPayload);
-}
-
-function updateTamperControls() {
-  const loaded = !!state.decode.stegoBytes;
-  const changed = loaded && state.decode.modified;
-  $("#btn-tamper-payload").disabled = !loaded || decodeBusy || changed;
-  $("#btn-clear-tamper").disabled = !changed || decodeBusy;
-  $("#tamper-state").textContent = !loaded ? "No file loaded" : changed ? "Modified copy" : "Unmodified copy";
-  $("#tamper-state").classList.toggle("is-modified", !!changed);
-  $("#tamper-help").textContent = !loaded
-    ? "Load a received stego file to enable this test."
-    : changed
-      ? "One bit has changed. Run Decode to see the actual verdict, or reset to the file you loaded."
-      : "Ready to test. A bit flip can damage PNG structure; the result may be Cannot Verify instead of Tampered. Use the guided WAV case for a controlled Tampered result.";
-}
-function updateDecodeButtonState() {
-  updateTamperControls();
-  const has = !!state.decode.stegoBytes;
-  $("#btn-decode-sync").disabled = decodeBusy || !has;
-  $("#btn-decode-async").disabled = decodeBusy || !has;
-}
-
-/* ------------------------------------------------------------------ *
- * Encode action
- * ------------------------------------------------------------------ */
-$("#btn-encode").addEventListener("click", async () => {
-  const btn = $("#btn-encode");
-  const revision = encodeRevision;
-  const snapshot = { cover: currentCover(), coverType: state.encode.coverType, payloadType: state.encode.payloadType, payloadSize: estimatePayloadSize() };
-  if (!snapshot.cover || encodeBusy) return;
-  snapshot.cover = { ...snapshot.cover, bytes: snapshot.cover.bytes.slice() };
-  encodeBusy = true;
-  $("#encode-feedback").textContent = "Encoding the selected cover…";
-  btn.disabled = true;
-  btn.textContent = "Encoding…";
+$("window-size").addEventListener("input",clearAnalysis);
+$("analyse-created").onclick=run(()=>{
+  if(!state.latest||state.latest.settings.cover_type!=="image")throw new Error("Protect a PNG first.");
+  state.analysisFile=state.latest.file;$("analysis-file").value="";$("analysis-file").required=false;
+  preview("analysis-preview",state.analysisFile);clearAnalysis();location.hash="analysis";
+});
+$("analysis-form").onsubmit=run(async e=>{
+  e.preventDefault();if(!state.analysisFile)throw new Error("Choose a PNG to analyse.");
+  const file=state.analysisFile, data=new FormData();data.append("image_file",file);data.append("window_size",$("window-size").value);
+  clearAnalysis();const revision=state.analysisRevision;$("analysis-button").disabled=true;$("analysis-status").textContent="Analysing image channels…";
   try {
-    const fd = new FormData();
-    fd.append("cover_type", state.encode.coverType);
-    fd.append("num_lsb", $("#encode-num-lsb").value);
-    fd.append("start_mode", $("#encode-start-mode").value);
-    fd.append("manual_offset", $("#encode-offset").value || 0);
-    fd.append("passphrase", $("#encode-passphrase").value || "");
-    fd.append("media_id", $("#encode-media-id").value || "");
-    fd.append("team_metadata", JSON.stringify({ team: "P3-6", tool: "Stego Integrity Verifier" }));
-    fd.append("payload_type", state.encode.payloadType);
-    fd.append(
-      "cover_file",
-      fileFromBytes(state.encode.coverBytes, state.encode.coverFilename || "cover", "")
-    );
-
-    if (state.encode.payloadType === "text") {
-      fd.append("payload_text", $("#encode-payload-text").value);
-    } else {
-      if (!state.encode.payloadBytes) throw new Error("Please choose a payload file first.");
-      fd.append(
-        "payload_file",
-        fileFromBytes(state.encode.payloadBytes, state.encode.payloadFilename || "payload.bin", state.encode.payloadMime || "")
-      );
+    let job=await api("/api/analyse?mode=async",data);
+    while(job.job_id) {
+      const id=job.job_id;await new Promise(resolve=>setTimeout(resolve,400));
+      const progress=await api("/api/jobs/"+id);
+      if(progress.status==="pending")continue;
+      if(progress.status==="error")throw new Error(progress.error);
+      job=progress.result;
     }
-
-    const res = await fetch("/api/encode", { method: "POST", body: fd });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-
-    if (revision !== encodeRevision) {
-      $("#encode-feedback").textContent = "Inputs changed while encoding. Encode again to compare the current selection.";
-      return;
-    }
-    renderEncodeResult(data, snapshot);
-    $("#encode-feedback").textContent = "Encoding complete. Compare the original and stego object below.";
-    addLog(
-      "Encode",
-      state.encode.coverType,
-      "OK",
-      true,
-      `LSBs=${data.num_lsb}, start=${data.start_index}, container=${data.container_size_bytes}B, capacity=${data.capacity_bytes}B`
-    );
-  } catch (e) {
-    addLog("Encode", state.encode.coverType, "FAILED", false, e.message);
-    $("#encode-feedback").textContent = `Encoding failed: ${e.message}`;
-  } finally {
-    encodeBusy = false;
-    updateEncodeButtonState();
-    btn.textContent = "🔏 Sign & Embed Payload";
-  }
+    if(file!==state.analysisFile||revision!==state.analysisRevision)return;
+    state.analysis=job;$("analysis-export").disabled=false;
+    const fmt=v=>v==null?"Insufficient data":Number(v).toPrecision(5);
+    const indication=(score,threshold)=>score==null?"Inconclusive":score>=threshold?"Indicators detected":"No strong indicators";
+    $("chi-results").innerHTML=detailsTable([["Median p-value",fmt(job.scores.chi_square)],["Threshold (provisional)",job.combined.thresholds.chi_square],["Interpretation",indication(job.scores.chi_square,job.combined.thresholds.chi_square)]])+table(["Channel","χ²","df","p-value","Usable pairs"],Object.entries(job.channels).map(([name,c])=>[name,fmt(c.chi_square.statistic),c.chi_square.degrees_of_freedom,fmt(c.chi_square.score),c.chi_square.usable_pairs]));
+    $("rs-results").innerHTML=detailsTable([["Median asymmetry",fmt(job.scores.rs)],["Threshold (provisional)",job.combined.thresholds.rs],["Interpretation",indication(job.scores.rs,job.combined.thresholds.rs)],["Masks","[0,1,1,0] / [0,-1,-1,0]"]])+table(["Channel","Groups","R+ / S+","R− / S−","Score"],Object.entries(job.channels).map(([name,c])=>[name,c.rs.groups,c.rs.positive.regular+" / "+c.rs.positive.singular,c.rs.negative.regular+" / "+c.rs.negative.singular,fmt(c.rs.score)]));
+    $("analysis-conclusion").textContent=({"High indication":"Indicators detected by both methods.","Low indication":"No strong indicators at these thresholds. This does not establish absence of hidden data.","Inconclusive":"Inconclusive: methods disagree or data is insufficient."})[job.combined.category];
+    $("analysis-limitations").replaceChildren(...job.limitations.map(text=>{const li=document.createElement("li");li.textContent=text;return li;}));
+    $("analysis-data").textContent=pretty(job);$("analysis-status").textContent="Completed · "+fileLabel(file)+" · "+job.image.width+" × "+job.image.height+" · "+job.image.mode;
+  } catch(error){$("analysis-status").textContent=error.message;throw error;}
+  finally{$("analysis-button").disabled=false;}
 });
-
-let lastStego = null; // { bytes, filename, mime }
-
-function renderEncodeResult(data, snapshot) {
-  const bytes = b64ToBytes(data.stego_base64);
-  lastStego = { bytes, filename: data.stego_filename, mime: data.mime, original: snapshot.cover, coverType: snapshot.coverType };
-
-  const panel = $("#encode-result");
-  panel.hidden = false;
-
-  const blobUrl = previewUrl("encode-download", bytes, data.mime);
-  renderComparison("encode", snapshot.cover, mediaDescriptor(bytes, data.stego_filename, snapshot.coverType, data.mime));
-  $("#encode-comparison-settings").textContent = `${data.num_lsb} LSB(s) · payload ${humanBytes(snapshot.payloadSize)} · complete package ${humanBytes(data.container_size_bytes)} · start ${data.start_index}`;
-
-  const kv = $("#encode-result-kv");
-  kv.innerHTML = "";
-  const payloadLabel =
-    snapshot.payloadType === "text"
-      ? "(typed text message)"
-      : data.metadata.filename || "(unnamed file)";
-  const rows = [
-    ["Payload file", payloadLabel],
-    ["Start location (carrier units)", data.start_index],
-    ["LSBs used", data.num_lsb],
-    ["Container size", humanBytes(data.container_size_bytes)],
-    ["Capacity from start", humanBytes(data.capacity_bytes)],
-    ["Payload hash (SHA-256)", data.payload_hash_hex],
-    ["Signature (RSA-2048, hex, truncated)", data.signature_hex.slice(0, 64) + "…"],
-    ["Media ID", data.metadata.media_id],
-  ];
-  for (const [k, v] of rows) {
-    const d1 = document.createElement("div");
-    d1.className = "kv-key";
-    d1.textContent = k;
-    const d2 = document.createElement("div");
-    d2.className = "kv-val";
-    d2.textContent = v;
-    kv.appendChild(d1);
-    kv.appendChild(d2);
-  }
-
-  $("#encode-metadata-json").textContent = JSON.stringify(data.metadata, null, 2);
-
-  const link = $("#encode-download-link");
-  link.href = blobUrl;
-  link.download = data.stego_filename;
-}
-
-$("#btn-send-to-decode").addEventListener("click", () => {
-  if (!lastStego) return;
-  for (const prefix of ["decode-stego", "decode-reference"]) {
-    fileReadTokens[prefix] = (fileReadTokens[prefix] || 0) + 1;
-  }
-  state.decode.stegoBytes = lastStego.bytes.slice();
-  state.decode.stegoBytesOriginal = lastStego.bytes.slice();
-  state.decode.modified = false;
-  state.decode.stegoFilename = lastStego.filename;
-  state.decode.coverType = lastStego.coverType;
-  state.decode.reference = { ...lastStego.original, bytes: lastStego.original.bytes.slice() };
-  renderFilePreview("decode-reference", fileFromBytes(state.decode.reference.bytes, state.decode.reference.name, state.decode.reference.mime), state.decode.reference.bytes, () => {
-    state.decode.reference = null; refreshDecodeComparison();
-  });
-
-  // Switch the decode tab to match, mirror settings a legitimate Party B
-  // would have agreed on out-of-band, and load the file into the dropzone.
-  setActiveTab("decode-cover-type", state.encode.coverType);
-  $("#decode-num-lsb").value = $("#encode-num-lsb").value;
-  $("#decode-num-lsb-out").textContent = $("#encode-num-lsb").value;
-  $("#decode-start-mode").value = $("#encode-start-mode").value;
-  $("#decode-offset-field").hidden = $("#encode-start-mode").value !== "manual";
-  $("#decode-passphrase-field").hidden = $("#encode-start-mode").value === "manual";
-  $("#decode-offset").value = $("#encode-offset").value;
-  $("#decode-passphrase").value = $("#encode-passphrase").value;
-
-  const fakeFile = fileFromBytes(lastStego.bytes, lastStego.filename, lastStego.mime);
-  renderFilePreview("decode-stego", fakeFile, lastStego.bytes, clearDecodeStego);
-  updateDecodeButtonState();
-  addLog("Demo shortcut", state.encode.coverType, "OK", true, "Local copy and original reference loaded into Verify; this is not an actual transfer.");
-  $("#decode-card").scrollIntoView({ behavior: "smooth", block: "start" });
-});
-
-/* ------------------------------------------------------------------ *
- * Negative-case tools
- * ------------------------------------------------------------------ */
-$("#btn-tamper-payload").addEventListener("click", (e) => {
-  if (!state.decode.stegoBytes || decodeBusy || state.decode.modified) return;
-  const bytes = state.decode.stegoBytes.slice();
-  const offset = Math.max(64, Math.min(bytes.length - 8, Math.floor(bytes.length * 0.55)));
-  bytes[offset] ^= 0x80; // flip a high (non-LSB) bit so this reads as visible-content tampering
-  state.decode.stegoBytes = bytes;
-  state.decode.modified = true;
-  updateTamperControls();
-  const fakeFile = fileFromBytes(bytes, state.decode.stegoFilename || "tampered", "");
-  renderFilePreview("decode-stego", fakeFile, bytes, clearDecodeStego);
-  addLog("Tamper tool", state.decode.coverType, "Applied", true, `Flipped bit at byte offset ${offset}`);
-  flashButton(e.currentTarget, "✅ Bit flipped");
-});
-
-$("#btn-clear-tamper").addEventListener("click", (e) => {
-  if (!state.decode.stegoBytesOriginal || decodeBusy) return;
-  state.decode.stegoBytes = state.decode.stegoBytesOriginal.slice();
-  state.decode.modified = false;
-  updateTamperControls();
-  const fakeFile = fileFromBytes(state.decode.stegoBytes, state.decode.stegoFilename || "stego", "");
-  renderFilePreview("decode-stego", fakeFile, state.decode.stegoBytes, clearDecodeStego);
-  addLog("Tamper tool", state.decode.coverType, "Reset", true, "Restored original stego bytes.");
-  flashButton(e.currentTarget, "✅ Restored");
-});
-
-$("#btn-use-server-key").addEventListener("click", async (e) => {
-  const btn = e.currentTarget; // capture before the first await - see note on btn-gen-keys above
-  const res = await fetch("/api/keys/public");
-  const data = await res.json();
-  if (data.public_key_pem) {
-    $("#decode-public-key").value = data.public_key_pem;
-    invalidateDecodeResult();
-    flashButton(btn, "✅ Loaded");
-  }
-});
-
-$("#btn-mangle-key").addEventListener("click", async (e) => {
-  const btn = e.currentTarget; // capture before the first await - see note on btn-gen-keys above
-  const res = await fetch("/api/keys/decoy", { method: "POST" });
-  const data = await res.json();
-  if (data.public_key_pem) {
-    $("#decode-public-key").value = data.public_key_pem;
-    invalidateDecodeResult();
-    addLog("Negative case", state.decode.coverType, "Decoy key loaded", true, "Loaded an unrelated public key to demo Signature Invalid.");
-    flashButton(btn, "✅ Decoy loaded");
-  }
-});
-
-/* Guided cases change only the local receiver inputs; never the saved file or keys. */
-const DEMO_CASES = {
-  "positive-image": { kind: "image", expected: "Authentic", steps: [
-    "Encode a PNG with the Short (Learning Outcome) quick-fill message. Check capacity first.",
-    "Download and transfer the stego PNG to Party B. Load the downloaded file here.",
-    "Use the sender's trusted public key and matching LSB/start settings, then decode. Record the extracted message and all three verification checks." ] },
-  "positive-audio": { kind: "audio", expected: "Authentic", steps: [
-    "Encode a WAV with the Large (Project Overview) quick-fill message. Check that the complete package fits.",
-    "Transfer and download the stego WAV. Play both objects, then verify with matching settings and the trusted public key.",
-    "Repeat with your team's custom payload to demonstrate a third message size." ] },
-  "wrong-key": { kind: "image", expected: "Signature Invalid", action: "Load a decoy public key", steps: [
-    "Load a valid stego PNG and first verify it as Authentic with matching settings.",
-    "Prepare this case to load an unrelated public key, then decode again. The saved key pair is unchanged.",
-    "Capture Signature Invalid. Afterwards click Use current server key (for files signed by this server), or reload the sender's trusted key." ] },
-  "tampered-audio": { kind: "audio", expected: "Tampered", action: "Alter the loaded WAV copy", steps: [
-    "Encode WAV at 1 LSB with Manual offset 700. Load the stego WAV and first verify it as Authentic.",
-    "Keep the correct public key and matching manual settings. Prepare this case to flip a bit in the loaded audio copy, then decode.",
-    "Capture Tampered and the failed cover-integrity check. Reset to original and verify again to show recovery." ] },
-  "missing": { kind: "image", expected: "Payload Missing", action: "Use original reference as received PNG", steps: [
-    "Choose an unencoded PNG in the optional Original reference selector. Use the correct public key.",
-    "Prepare this case to copy that PNG into the received-file input and set 1 LSB, Manual offset 0. Then decode.",
-    "Capture Payload Missing. Reload the actual stego PNG afterwards. The reference must really be an unencoded original." ] },
-  "wrong-start": { expected: "Wrong Start Location", action: "Change the receiver passphrase", steps: [
-    "Encode PNG or WAV using passphrase-derived start mode, then verify once with the correct passphrase.",
-    "Prepare this case to change only the receiver passphrase, then decode. Keep the same LSB depth and trusted public key.",
-    "Restore the agreed passphrase afterwards. A missing payload and a wrong start can be indistinguishable; this verdict uses the selected start mode." ] },
-  "oversized": { expected: "Encoding rejected (capacity error)", steps: [
-    "In Protect, choose a small cover and 1 LSB. Note usable embedding capacity.",
-    "Choose a payload file larger than that capacity and attempt encoding. Capture the capacity warning and rejection; no new stego output should be produced.",
-    "This is an encoding case, not a decode verdict. Compare package bytes (payload + metadata + signature) against capacity, not cover file size." ] },
-  "invalid-key": { expected: "Cannot Verify", action: "Insert invalid public-key text", steps: [
-    "Load a valid stego PNG or WAV with matching decoding settings.",
-    "Prepare this case to replace the receiver key field with invalid text, then decode.",
-    "Capture Cannot Verify, then restore the trusted public key." ] },
-};
-$("#demo-case").addEventListener("change", () => {
-  const demo = DEMO_CASES[$("#demo-case").value];
-  $("#demo-expected").textContent = demo ? `Expected result: ${demo.expected}` : "";
-  $("#demo-steps").replaceChildren();
-  for (const step of demo?.steps || []) {
-    const li = document.createElement("li"); li.textContent = step; $("#demo-steps").append(li);
-  }
-  $("#btn-demo-prepare").hidden = !demo?.action;
-  $("#btn-demo-prepare").textContent = demo?.action || "Prepare case";
-  $("#demo-feedback").textContent = "";
-  $("#demo-outcome").textContent = "";
-});
-$("#btn-demo-prepare").addEventListener("click", async () => {
-  const button = $("#btn-demo-prepare");
-  const id = $("#demo-case").value;
-  const demo = DEMO_CASES[id];
-  const feedback = $("#demo-feedback");
-  if (decodeBusy) { feedback.textContent = "Wait for the current verification to finish."; return; }
-  button.disabled = true;
-  try {
-    if (id === "missing") {
-      const original = state.decode.reference;
-      if (!original || original.kind !== "image" || !/\.png$/i.test(original.name)) throw new Error("Select an unencoded PNG as the Original reference first.");
-      fileReadTokens["decode-stego"] = (fileReadTokens["decode-stego"] || 0) + 1;
-      state.decode.stegoBytes = original.bytes.slice();
-      state.decode.stegoBytesOriginal = original.bytes.slice();
-      state.decode.modified = false;
-      state.decode.stegoFilename = original.name;
-      applyDecodeCoverType("image"); setActiveTab("decode-cover-type", "image");
-      $("#decode-num-lsb").value = "1"; $("#decode-num-lsb-out").textContent = "1";
-      $("#decode-start-mode").value = "manual"; $("#decode-offset").value = "0";
-      $("#decode-offset-field").hidden = false; $("#decode-passphrase-field").hidden = true;
-      renderFilePreview("decode-stego", fileFromBytes(original.bytes, original.name, "image/png"), original.bytes, clearDecodeStego);
-      updateDecodeButtonState();
-    } else {
-      if (!state.decode.stegoBytes || (demo.kind && state.decode.coverType !== demo.kind)) throw new Error(`Load a valid ${demo.kind === "image" ? "PNG" : demo.kind === "audio" ? "WAV" : "PNG or WAV"} stego file first.`);
-      if (id === "wrong-key") {
-        const response = await fetch("/api/keys/decoy", { method: "POST" });
-        const data = await response.json();
-        if (!response.ok || !data.public_key_pem) throw new Error(data.error || "Could not load a decoy key.");
-        if ($("#demo-case").value !== id) return;
-        $("#decode-public-key").value = data.public_key_pem;
-      } else if (id === "tampered-audio") {
-        if ($("#decode-start-mode").value !== "manual" || $("#decode-num-lsb").value !== "1") throw new Error("Use a WAV encoded with 1 LSB and manual start mode. Keep the original matching offset.");
-        $("#btn-tamper-payload").click();
-      } else if (id === "wrong-start") {
-        if ($("#decode-start-mode").value !== "passphrase") throw new Error("Use a file encoded in passphrase-derived mode first.");
-        $("#decode-passphrase").value += "-wrong-demo";
-      } else if (id === "invalid-key") {
-        $("#decode-public-key").value = "INVALID PUBLIC KEY - ACW1 negative case";
-      }
-    }
-    invalidateDecodeResult();
-    feedback.textContent = "Case prepared. Run Decode to obtain the actual verdict; an expected result is not evidence until verified.";
-    addLog("Demo setup", state.decode.coverType, "Prepared", true, `${id}: expected ${demo.expected}`);
-  } catch (error) { feedback.textContent = error.message; }
-  finally { button.disabled = false; }
-});
-
-/* ------------------------------------------------------------------ *
- * Decode action (sync + async)
- * ------------------------------------------------------------------ */
-function buildDecodeFormData() {
-  const fd = new FormData();
-  fd.append("cover_type", state.decode.coverType);
-  fd.append("num_lsb", $("#decode-num-lsb").value);
-  fd.append("start_mode", $("#decode-start-mode").value);
-  fd.append("manual_offset", $("#decode-offset").value || 0);
-  fd.append("passphrase", $("#decode-passphrase").value || "");
-  fd.append("public_key_pem", $("#decode-public-key").value || "");
-  fd.append(
-    "stego_file",
-    fileFromBytes(state.decode.stegoBytes, state.decode.stegoFilename || "stego", "")
-  );
-  return fd;
-}
-
-async function runDecode(mode) {
-  if (decodeBusy || !state.decode.stegoBytes) return;
-  decodeBusy = true;
-  const revision = decodeRevision;
-  const kind = state.decode.coverType;
-  const demoId = $("#demo-case").value;
-  const status = $("#async-status");
-  status.hidden = false;
-  status.textContent = "Extracting and verifying the received file…";
-  updateDecodeButtonState();
-  try {
-    const response = await fetch(`/api/decode?mode=${mode}`, { method: "POST", body: buildDecodeFormData() });
-    let data = await response.json();
-    if (data.error) throw new Error(data.error);
-    if (mode === "async") {
-      const jobId = data.job_id;
-      const deadline = Date.now() + 120000;
-      while (true) {
-        if (Date.now() > deadline) throw new Error("Verification timed out. Try again with a smaller file.");
-        await new Promise(resolve => setTimeout(resolve, 400));
-        const result = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
-        data = await result.json();
-        if (!result.ok || data.status === "error") throw new Error(data.error || "Verification failed.");
-        if (data.status === "done") { data = data.result; break; }
-      }
-    }
-    if (revision !== decodeRevision) {
-      status.textContent = "Received file or settings changed. Run verification again for the current selection.";
-      return;
-    }
-    renderDecodeResult(data);
-    const demo = DEMO_CASES[demoId];
-    if (demo && demoId !== "oversized") {
-      const matches = data.verdict === demo.expected && (!demo.kind || demo.kind === kind);
-      const evidence = `Expected ${demo.expected}${demo.kind ? ` (${demo.kind})` : ""}; observed ${data.verdict} (${kind}). ${matches ? "Matches expected case result." : "Does not match this case; check the setup."}`;
-      if ($("#demo-case").value === demoId) $("#demo-outcome").textContent = evidence;
-      addLog("Demo result", kind, data.verdict, matches, `${demoId}: ${evidence}`);
-    }
-    status.textContent = "Verification complete. The reference and received object remain above for comparison.";
-  } catch (error) {
-    addLog(`Decode (${mode})`, kind, "FAILED", false, error.message);
-    status.textContent = `Verification failed: ${error.message}`;
-  } finally {
-    decodeBusy = false;
-    updateDecodeButtonState();
-  }
-}
-$("#btn-decode-sync").addEventListener("click", () => runDecode("sync"));
-$("#btn-decode-async").addEventListener("click", () => runDecode("async"));
-
-function renderDecodeResult(data) {
-  ["payload-media", "payload-download"].forEach(releasePreviewUrl);
-  const panel = $("#decode-result");
-  panel.hidden = false;
-
-  const badge = $("#verdict-badge");
-  badge.textContent = data.verdict;
-  badge.className = `verdict-badge verdict-${data.verdict.replace(/\s+/g, "")}`;
-  $("#verdict-detail").textContent = data.detail;
-
-  const kv = $("#decode-result-kv");
-  kv.innerHTML = "";
-  const boolCell = (label, val) => {
-    const d1 = document.createElement("div");
-    d1.className = "kv-key";
-    d1.textContent = label;
-    const d2 = document.createElement("div");
-    d2.className = `kv-val ${val === true ? "ok" : val === false ? "bad" : ""}`;
-    d2.textContent = val === null || val === undefined ? "n/a" : val ? "✅ match / valid" : "❌ mismatch / invalid";
-    kv.appendChild(d1);
-    kv.appendChild(d2);
-  };
-  boolCell("Payload hash match", data.payload_hash_match);
-  boolCell("Signature valid", data.signature_valid);
-  boolCell("Cover (visible content) unchanged", data.cover_hash_match);
-  const startRow = document.createElement("div");
-  startRow.className = "kv-key";
-  startRow.textContent = "Start location used";
-  kv.appendChild(startRow);
-  const startVal = document.createElement("div");
-  startVal.className = "kv-val";
-  startVal.textContent = data.start_index ?? "n/a";
-  kv.appendChild(startVal);
-
-  const extracted = $("#extracted-payload");
-  extracted.innerHTML = "";
-  if (data.data_base64) {
-    const bytes = b64ToBytes(data.data_base64);
-    const mime = data.data_mime || "application/octet-stream";
-
-    const label = document.createElement("div");
-    label.className = "dz-filename";
-    label.textContent = data.data_filename ? `📄 ${data.data_filename} · ${mime}` : `📝 typed text · ${mime}`;
-    extracted.appendChild(label);
-
-    if (mime.startsWith("text/")) {
-      const pre = document.createElement("pre");
-      pre.textContent = new TextDecoder().decode(bytes);
-      extracted.appendChild(pre);
-    } else if (mime.startsWith("audio/")) {
-      const audio = document.createElement("audio");
-      audio.controls = true;
-      audio.src = previewUrl("payload-media", bytes, mime);
-      extracted.appendChild(audio);
-    } else if (mime.startsWith("image/")) {
-      const img = document.createElement("img");
-      img.style.maxHeight = "160px";
-      img.src = previewUrl("payload-media", bytes, mime);
-      extracted.appendChild(img);
-    } else if (mime.startsWith("video/")) {
-      const video = document.createElement("video");
-      video.controls = true;
-      video.style.maxHeight = "200px";
-      video.src = previewUrl("payload-media", bytes, mime);
-      extracted.appendChild(video);
-    }
-    const link = document.createElement("a");
-    link.className = "btn btn-secondary";
-    link.textContent = `⬇️ Download extracted payload (${humanBytes(bytes.length)})`;
-    link.href = previewUrl("payload-download", bytes, mime);
-    link.download = data.data_filename || "extracted_payload.bin";
-    extracted.appendChild(document.createElement("br"));
-    extracted.appendChild(link);
-  } else {
-    extracted.textContent = "No payload could be extracted.";
-  }
-
-  $("#decode-metadata-json").textContent = data.metadata ? JSON.stringify(data.metadata, null, 2) : "(none)";
-
-  const ok = data.verdict === "Authentic";
-  addLog(
-    "Decode",
-    state.decode.coverType,
-    data.verdict,
-    ok,
-    `hash=${data.payload_hash_match}, sig=${data.signature_valid}, cover=${data.cover_hash_match}`
-  );
-}
-
-/* ------------------------------------------------------------------ *
- * Init
- * ------------------------------------------------------------------ */
-loadPublicKey();
-
-// Comparison state follows inputs, independently of cryptographic verification.
-$("#encode-media-id").addEventListener("input", updateCapacity);
-["decode-num-lsb", "decode-start-mode", "decode-offset", "decode-passphrase", "decode-public-key"].forEach(id => {
-  document.getElementById(id).addEventListener("input", invalidateDecodeResult);
-});
-const themeButton = $("#btn-theme");
-function renderThemeButton() {
-  const dark = document.documentElement.dataset.theme === "dark";
-  themeButton.textContent = dark ? "Light theme" : "Dark theme";
-  themeButton.setAttribute("aria-pressed", String(dark));
-}
-themeButton.addEventListener("click", () => {
-  const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-  document.documentElement.dataset.theme = theme;
-  try { localStorage.setItem("stego-theme", theme); } catch (_) {}
-  renderThemeButton();
-});
-renderThemeButton();
-refreshEncodeComparison();
-refreshDecodeComparison();
+$("analysis-export").onclick=()=>{if(state.analysis)exportJSON(state.analysis,"steganalysis-report.json");};
+updateBits();updateStart();updateStart("verify");
+loadKeys().catch(error=>notice("Could not load Alice's keys: "+error.message,true));

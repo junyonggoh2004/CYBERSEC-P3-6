@@ -3,7 +3,9 @@ __pycache__/
 .venv/
 venv/
 backend/keys/private_key.pem
+backend/keys/saved/
 test_evidence/
 samples/*
 !samples/steganalysis/
 .pytest_cache/
+node_modules/

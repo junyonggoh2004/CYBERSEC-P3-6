@@ -384,3 +384,73 @@ textarea { line-height: 1.6; }
 .tamper-reset { background: var(--card); color: var(--text); border: 1px solid var(--card-border); }
 .tamper-help { margin: 12px 0 0; font-size: .76rem; color: var(--text-dim); max-width: 90ch; }
 @media(max-width:560px) { .tamper-panel { padding: 16px; } .tamper-actions .btn { width: 100%; } }
+
+/* Junyong's first draft: task pages using Gabriel's palette and components. */
+.page, #protect-form { display: grid; gap: 24px; min-width: 0; }
+.page { grid-column: 1 / -1; }
+.workspace-intro { padding-bottom: 8px; }
+.quicknav a[aria-current="page"] { color: var(--accent); background: var(--bg-soft); border-color: var(--card-border); }
+.card h3 { display: flex; gap: 10px; align-items: center; margin: 0; font-size: 1.05rem; }
+.card p { margin: 0; }
+.field { display: flex; flex-direction: column; gap: 7px; font-size: .85rem; font-weight: 600; min-width: 0; }
+.field-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
+input, select, textarea { max-width: 100%; }
+input:not([type="range"]), select, textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--card-border); border-radius: 9px; color: var(--text); background: var(--card); }
+input[type="file"] { font-size: .78rem; padding: 12px; border-style: dashed; }
+input::file-selector-button { padding: 7px 10px; border: 0; border-radius: 5px; margin-right: 10px; cursor: pointer; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.actions .field { flex: 1 1 200px; }
+.actions .btn { flex: 0 1 auto; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.mini-preview { min-width: 0; border-radius: 10px; overflow: hidden; }
+.mini-preview img { max-height: 150px; max-width: 100%; object-fit: contain; display: block; margin: auto; }
+.mini-preview audio, .comparison-stage audio { width: 100%; }
+.mini-preview p { font-size: .78rem; margin-top: 8px; overflow-wrap: anywhere; }
+.empty { color: var(--text-dim); padding: 22px 0; font-size: .85rem; }
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(145px,1fr)); gap: 12px; }
+.metric { background: var(--bg-soft); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.metric span { display: block; font-size: .72rem; color: var(--text-dim); }
+.metric strong { display: block; font-size: 1.2rem; margin-top: 3px; overflow-wrap: anywhere; }
+progress { width: 100%; height: 9px; accent-color: var(--accent); }
+.bit-lesson { display: flex; gap: 24px; padding: 18px; background: var(--bg-soft); border-radius: 10px; align-items: center; }
+.bit-lesson p { font-size: .8rem; max-width: 60ch; }
+.bits { display: flex; gap: 4px; margin-top: 8px; }
+.bit { padding: 7px 9px; border: 1px solid var(--card-border); border-radius: 5px; font-family: monospace; background: var(--card); }
+.bit.selected { background: #365ccc; color: white; border-color: #365ccc; }
+details { border-top: 1px solid var(--card-border); padding-top: 13px; }
+summary { cursor: pointer; font-size: .85rem; font-weight: 600; }
+details[open] summary { margin-bottom: 14px; }
+pre { padding: 16px; border-radius: 8px; background: var(--bg-soft); white-space: pre-wrap; overflow-wrap: anywhere; font-size: .73rem; max-height: 430px; overflow: auto; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .77rem; }
+th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--card-border); vertical-align: top; overflow-wrap: anywhere; }
+th { color: var(--text-dim); font-weight: 600; }
+.detail-table th { width: 30%; }
+.detail-table td { word-break: break-word; }
+.three-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px; }
+.three-grid .card { padding: 18px; }
+.comparison-stage { height: 260px; display: flex; flex-direction: column; }
+.comparison-stage img { transition: transform .12s; }
+.comparison-stage p { font-size: .73rem; }
+.content-text { white-space: pre-wrap; overflow: auto; max-height: 200px; text-align: left; width: 100%; padding: 10px; font-size: .8rem; }
+.chart-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; }
+.chart-container { min-width: 0; }
+.chart-container p { font-size: .8rem; font-weight: 600; }
+canvas { width: 100%; height: auto; display: block; }
+.legend { display: inline-block; width: 20px; height: 3px; vertical-align: middle; margin-left: 12px; }
+.legend.before { background: #365ccc; }
+.legend.after { background: #d46a12; }
+.difference-image { width: 100%; max-height: 350px; object-fit: contain; background: #000; }
+.checks { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+.check { padding: 12px; border: 1px solid var(--card-border); border-radius: 8px; }
+.check span { display: block; color: var(--text-dim); font-size: .73rem; }
+.check strong { font-size: .85rem; }
+.passed { color: var(--good); }
+.failed { color: var(--danger); }
+.result-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.notice { padding: 15px 20px; background: var(--bg-soft); border-left: 4px solid var(--accent); border-radius: 8px; grid-column: 1 / -1; }
+.notice.error { border-color: var(--danger); color: var(--danger); }
+#key-list code { font-size: .68rem; overflow-wrap: anywhere; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #5a83d8; outline-offset: 2px; }
+@media(max-width:800px) { .three-grid { grid-template-columns: 1fr; } .three-grid .comparison-stage { height: 280px; } .bit-lesson { flex-direction: column; align-items: flex-start; } }
+@media(max-width:560px) { .field-grid,.chart-grid { grid-template-columns: 1fr; } .checks { grid-template-columns: repeat(2,minmax(0,1fr)); } .bit { padding: 5px 7px; } .metric strong { font-size: 1rem; } }

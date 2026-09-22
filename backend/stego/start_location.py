@@ -11,18 +11,16 @@ Two modes are supported, chosen in the GUI:
 
   "passphrase" - the offset is *derived*, never stored anywhere, from
                  HMAC-SHA256(passphrase, stable_cover_hash) mod capacity.
-                 This binds the start location to (a) a shared secret the
-                 attacker doesn't have and (b) the specific cover file, so a
-                 stego file cannot be re-used against a different cover, and
-                 an attacker who doesn't know the passphrase cannot find the
-                 payload without exhausting the passphrase space rather than
-                 just the offset space. This is the recommended/innovative
-                 mode (see README "Innovation" section) and is the default
-                 in the UI.
+                 The stable hash used for location derivation always uses SHA-256,
+                 independently of the selected content hash. Both parties can
+                 derive it before reading the embedded record. This is not
+                 encryption: an attacker may still scan candidate offsets.
+                 Weak passphrases can also be guessed. Cover changes may change
+                 the derived offset and prevent extraction altogether.
 
-Both modes are exposed identically to encode/decode so a wrong passphrase or
-wrong manual offset at decode time naturally produces a "Wrong Start
-Location" verdict instead of a crash.
+An unreadable marker cannot prove the location was wrong. The decoder reports
+Payload Missing with an explanation of wrong settings, corruption or absence.
+
 """
 from __future__ import annotations
 
