@@ -1,481 +1,165 @@
-# PNG / WAV LSB Steganography Prototype
+# Stego Integrity Verifier
 
-## Purpose
-A simple educational GUI prototype that hides and extracts UTF-8 text in:
-- PNG images
-- uncompressed PCM WAV audio
+INF2005 ACW1 — Steganographic Image and Audio Integrity Verification with Digital Signature-Based Authentication (Team P3-6)
 
-It supports selectable 1–8 LSBs and a user-selected start carrier index.
+A single-page, drag-and-drop web app (Flask backend + vanilla HTML/CSS/JS frontend) that hides a signed verification payload inside a PNG image, a WAV/PCM audio file, or a video file (via its audio track) using LSB replacement steganography, then lets a second party extract and verify it.
 
-## Install and run
+## What it does
+
+- **PNG steganalysis (Kim)**: independent chi-square pairs-of-values and RS group
+  analysis, full-image/window statistics, cautious combined indication, and JSON
+  report export. Open the **Steganalysis** section. See
+  [Steganalysis implementation guide](docs/STEGANALYSIS_GUIDE.md) for formulas, limitations,
+  tests and demo steps, and [evaluation results](evidence/steganalysis/RESULTS.md)
+  for the 100-case natural-image experiment. Statistics do not change verification
+  verdicts. Detector thresholds remain provisional.
+
+Run Kim's tests with `python -m pip install -r requirements-dev.txt` followed by
+`python -m pytest tests/test_steganalysis.py -q`. Reproduce the evaluation with
+`python scripts/evaluate_steganalysis.py`. Exact tested dependency versions are
+recorded in `requirements-tested.txt`.
+
+- **Embed (encode)**: drop a cover file — PNG image, 16/32-bit PCM WAV, or a video file (MP4/MKV/MOV/AVI/WebM) with an audio track — pick a payload (typed text, any file, or an audio/MP3 file), pick how many LSBs to use (1–8) and where to start embedding, and produce a signed stego file.
+- **Extract (decode)**: drop a received stego file, supply the same LSB depth / start-location secret and a public key, and get back a clear verdict: **Authentic, Tampered, Signature Invalid, Payload Missing, Wrong Start Location,** or **Cannot Verify** — plus the recovered payload.
+- **One drop zone, any file**: you don't pick "image" or "audio" or "video" first — drop (or click-to-browse) any supported cover/stego file into the single drop zone and the app detects the type from the file itself and switches to the matching tab automatically. The tabs still work for manually forcing a type if you want to.
+- Everything happens on one page via drag-and-drop; nothing is hard-coded (cover files, payload, bit depth, start location and keys are all chosen at runtime).
+
+## Quick start
 
 ```bash
+python -m venv .venv
+# Windows:
+.venv\Scripts\activate
 pip install -r requirements.txt
-python steg_app.py
+
+python scripts/make_samples.py   # optional: generates sample PNG/WAV/MP4 covers in samples/
+python backend/app.py            # starts the server on http://127.0.0.1:5000
 ```
 
-## Encode flow
-1. Select a PNG or PCM WAV file.
-2. Choose the number of LSBs (1–8).
-3. Choose the start carrier index.
-4. Type the hidden text.
-5. Click **Encode → Save Stego File**.
-6. Save the new PNG/WAV.
+Open `http://127.0.0.1:5000` in a browser. A fresh RSA-2048 key pair is generated automatically on first run under `backend/keys/` (the private key is **not** committed to git — see `.gitignore`).
 
-If a cover has a `.png` filename but contains another image format (such as
-WebP), the encoder converts its pixels and saves a genuine, lossless PNG.
-The original cover is unchanged when you save to a new file. To decode, select
-the exported stego PNG; renaming a WebP or JPEG file to `.png` does not make it
-a PNG or restore hidden data lost through lossy compression.
-
-## Decode flow
-1. Select the generated stego file.
-2. Enter the same LSB count.
-3. Enter the same start carrier index.
-4. Click **Decode Selected File**.
-
-## Packet format
-Before embedding, the program converts the message to UTF-8 and builds:
-
-```text
-[ "STEG1" | 4-byte length | 4-byte CRC32 | UTF-8 message ]
-```
-
-The fixed header is 13 bytes.
-
-- `STEG1` helps the decoder recognise a payload.
-- `length` tells it how many bytes to extract.
-- `CRC32` detects corruption or wrong settings.
-- CRC32 is **not** a cryptographic hash.
-
-## Core functions
-
-The functions in `steg_app.py` separate file handling from hiding data. PNG and
-WAV loaders expose a sequence of usable **carrier units**, so the same packet
-encoder and decoder work for both formats.
-
-| Parameter | Meaning |
-| --- | --- |
-| `raw` | Mutable `bytearray` of decoded pixel bytes or PCM audio bytes, excluding file headers. |
-| `carrier_count` | Total number of usable RGB channel values or individual audio samples. |
-| `mapper` | Function that translates a carrier index into an index in `raw`. It skips alpha bytes or the higher bytes of audio samples. |
-| `packet` | Header and UTF-8 message bytes returned by `build_packet`. |
-| `start` | Zero-based carrier index where embedding or extraction begins; defaults to `0` in the public encode/decode functions. |
-| `lsb_count` | Number of lowest bits used per carrier byte, from `1` to `8`; defaults to `1` in the public encode/decode functions. |
-
-An LSB is a least-significant bit: changing it changes a byte's numeric value
-less than changing a higher bit. Using more LSBs increases capacity but can
-cause more visible image changes or audible audio changes. `start` counts
-carrier units, not file bytes, pixels, or seconds. Neither setting is stored
-in the packet, so decoding needs the same values used during encoding.
-
-### `StegError`
-
-This custom exception identifies expected application errors, such as an
-invalid setting, insufficient capacity, or a missing payload. The GUI catches
-exceptions and displays their messages. Direct callers of the core functions
-can catch `StegError`; file and image libraries can also raise their own errors.
-
-### `build_packet(message: str) -> bytes`
-
-Input: Python text string.  
-Output: framed bytes containing marker, length, CRC32 and UTF-8 message.
-
-The function encodes the string as UTF-8, calculates `zlib.crc32(data)`, and
-uses `HEADER.pack(...)` to prepend the marker, byte length, and checksum.
-`HEADER = struct.Struct(">5sII")` means big-endian storage (`>`) of a five-byte
-marker (`5s`) and two unsigned four-byte integers (`II`). The length counts
-UTF-8 bytes rather than characters: `"Hi"` produces a 15-byte packet, while
-characters such as emoji can require multiple bytes each.
-
-### `_bits(data: bytes) -> str`
-
-Converts each byte to eight binary digits, including leading zeroes, then joins
-them into one string. For example, `b"A"` becomes `"01000001"`. Within each
-byte, the most-significant bit comes first. This establishes the bit order
-used by both embedding and extraction.
-
-### `embed_packet(raw, carrier_count, mapper, packet, start=0, lsb_count=1)`
-
-Output: the same `raw` bytearray, modified in place.
-
-It first checks that the LSB count is `1..8`, the start index is inside the
-carrier, and the entire packet fits. It then:
-
-1. converts packet bytes to bits;
-2. groups bits according to the chosen LSB count;
-3. clears those low-order bits in each carrier;
-4. inserts the payload bits.
-
-For each selected byte, `mask = (1 << lsb_count) - 1` selects its lowest bits,
-and `clear_mask = 0xFF ^ mask` selects the bits to preserve. The update is:
-
-```python
-raw[raw_index] = (raw[raw_index] & clear_mask) | int(chunk, 2)
-```
-
-For example, with two LSBs, embedding `01` into `11010110` produces `11010101`.
-If the last chunk is short, it is padded with zeroes on the right. Processing
-stops once the packet is embedded; earlier carriers and later unused carriers
-are untouched.
-
-### `extract_bytes(raw, carrier_count, mapper, start, lsb_count, byte_count) -> bytes`
-
-Input: raw stego bytes, carrier mapping, matching settings, and the number of
-bytes to recover. Output: reconstructed bytes, without modifying `raw`.
-
-The function validates the settings and checks that `byte_count * 8` bits fit.
-It reads each selected carrier byte, masks off its higher bits, and formats the
-remaining bits as a string of exactly `lsb_count` digits. It joins these chunks,
-trims to the requested bit length, and converts each group of eight bits back
-to a byte. Trimming removes any padding added during embedding.
-
-### `decode_packet(raw, carrier_count, mapper, start=0, lsb_count=1) -> str`
-
-This function coordinates extraction and returns the recovered Python string:
-
-1. extracts the 13-byte header;
-2. checks for `STEG1`;
-3. reads the stored payload length;
-4. extracts the complete packet;
-5. checks CRC32;
-6. converts UTF-8 bytes back to text.
-
-The second extraction starts again at `start` and reads the header plus the
-message. Reading the complete packet this way also handles LSB counts where
-the header ends partway through a carrier's bit chunk. The header is then
-removed before checking the message checksum and decoding UTF-8.
-
-A wrong marker, insufficient carrier data, mismatched CRC, or invalid UTF-8
-raises `StegError`. CRC detects accidental corruption; it does not authenticate
-the sender or prevent someone from changing a message and recalculating it.
-
-## PNG implementation
-
-### `_load_png(path, *, allow_conversion=False)`
-
-Returns `(image, raw, carrier_count, mapper)` for an image opened with Pillow.
-`image` contains the image mode and dimensions, and `raw` holds its decoded
-pixel bytes. The source file is closed before returning.
-
-By default, the function checks the actual image format and rejects non-PNG
-data. Encoding and capacity calculation pass `allow_conversion=True`, allowing
-readable cover images such as a WebP saved with a `.png` filename. Decoding
-keeps the strict check and expects the exported PNG.
-
-RGB and RGBA images are copied. Other modes, such as grayscale or palette
-images, are converted to RGB or RGBA, retaining an alpha channel when the
-source has alpha or transparency information.
-
-Each red, green or blue channel value is one carrier unit.  
-RGBA alpha values are skipped.
-
-| Image mode | Mapping from carrier index `i` to raw byte index |
-| --- | --- |
-| RGB | `i`, because every byte is an R, G, or B value. |
-| RGBA | `(i // 3) * 4 + (i % 3)`, skipping every fourth byte (alpha). |
-
-For RGBA, carrier indices `0, 1, 2, 3` map to raw byte indices `0, 1, 2, 4`.
-Both modes provide `width * height * 3` carriers.
-
-### `encode_png(input_path, output_path, message, start=0, lsb_count=1)`
-
-Loads the cover with conversion enabled, builds the message packet, and embeds
-it into the RGB channel bytes. `Image.frombytes(...)` rebuilds an image using
-the original loaded dimensions and normalized mode. Saving with the explicit
-`"PNG"` format writes a genuine, lossless PNG regardless of the cover's actual
-format. The function writes to `output_path` and returns `None`.
-
-Example with 1 LSB:
-
-```text
-original channel: 11010110
-hidden bit:              1
-result:           11010111
-```
-
-### `decode_png(input_path, start=0, lsb_count=1) -> str`
-
-Loads a genuine PNG with `_load_png`, then passes its bytes and RGB mapping to
-`decode_packet`. It returns the hidden text after packet validation succeeds.
-
-PNG is used because it is lossless. JPEG conversion would normally destroy simple pixel-LSB data.
-
-## WAV implementation
-
-### `_load_wav(path)`
-
-Opens the file with Python's `wave` module and returns
-`(params, raw, carrier_count, mapper)`. `params` holds audio properties such as
-channel count, sample width, sample rate, and frame count. `raw` holds the PCM
-sample bytes read from all frames.
-
-It requires uncompressed PCM and a sample width of `1`, `2`, `3`, or `4` bytes
-(8, 16, 24, or 32 bits). It also checks that the byte count is divisible by the
-sample width. The carrier count is `len(raw) // params.sampwidth`, and the
-mapper is `i * params.sampwidth`.
-
-One carrier is one channel's sample. For stereo audio, samples are interleaved
-as left, right, left, right, so one frame normally contains two carriers.
-
-### `encode_wav(input_path, output_path, message, start=0, lsb_count=1)`
-
-Calls `_load_wav`, builds the packet, and embeds it using the audio mapper.
-It opens the output WAV, copies the audio parameters with `setparams`, and
-writes the modified sample bytes with `writeframes`. It returns `None`.
-
-For each PCM sample, the prototype modifies only its least-significant byte. WAV PCM is little-endian, so that byte contains the actual low-order sample bits.
-
-For 16-bit PCM:
-
-```text
-[least-significant byte][most-significant byte]
-```
-
-With `LSBs = 1`, only the lowest bit of each sample changes.
-
-### `decode_wav(input_path, start=0, lsb_count=1) -> str`
-
-Calls `_load_wav` and passes the sample bytes and mapper to `decode_packet`.
-It reads sample LSBs in the same order as encoding and returns the validated
-hidden text.
-
-## Capacity
-
-### `carrier_info(path, start, lsb_count)`
-
-Chooses `_load_png(..., allow_conversion=True)` or `_load_wav(...)` using the
-file's lowercase suffix. Other suffixes are rejected. It checks that `start`
-is inside the carrier and returns `(kind, unit, count, usable)`:
-
-| Return value | Meaning |
-| --- | --- |
-| `kind` | `"PNG"` or `"WAV"`, identifying the selected carrier workflow. |
-| `unit` | `"RGB channel values"` or `"PCM samples"`. |
-| `count` | Total carrier units before accounting for `start`. |
-| `usable` | Maximum message bytes after subtracting the packet header, clamped to zero. |
-
-The GUI validates the LSB count through `settings()` before calling this
-function; `carrier_info` itself only validates the start index.
-Approximate usable capacity:
-
-```text
-available bits = (carrier_count - start) × LSB_count
-```
-
-Then divide by 8 and subtract the 13-byte header.
-
-The exact calculation used for the display is:
-
-```python
-usable = max(0, ((carrier_count - start) * lsb_count) // 8 - HEADER_SIZE)
-```
-
-For a 256 × 256 RGB image, start `0`, and one LSB, there are 196,608 available
-bits: 24,576 packet bytes, leaving 24,563 message bytes. Compare this limit
-with `len(message.encode("utf-8"))`, not the number of characters. A displayed
-capacity of zero can also mean the carrier cannot fit even the header;
-`embed_packet` performs the final check.
-
-For RGB/RGBA PNG:
-
-```text
-carrier_count = width × height × 3
-```
-
-For WAV:
-
-```text
-carrier_count = number of interleaved PCM samples
-```
-
-## GUI functions and application flow
-
-`App` inherits from `tk.Tk`. Its methods connect the interface to the file and
-packet functions above.
-
-| Method | What it does |
-| --- | --- |
-| `App.__init__()` | Creates the window, initializes variables for the selected file, settings, capacity, and status, then calls `_ui()`. Defaults are start `0` and one LSB. |
-| `App._ui()` | Builds the file picker, settings fields, text box, action buttons, and status area. Connects buttons to their handlers and settings edits to `refresh()`. The Clear Text button deletes the text box contents. |
-| `App.settings()` | Reads and converts the start and LSB values to integers, checks `start >= 0` and `1 <= lsb <= 8`, and returns `(start, lsb)`. Carrier-specific bounds are checked when the file is loaded. |
-| `App.browse()` | Opens the file selection dialog, stores the chosen path, and calls `refresh()`. Cancelling leaves the selection unchanged. |
-| `App.refresh()` | Calls `settings()` and `carrier_info()` to update the capacity label. Displays errors in that label; returns immediately if no path is selected. |
-| `App.encode()` | Reads the path, settings, and text (excluding Tk's automatic final newline). Uses the `.png` or `.wav` suffix to choose a save dialog and encoder. Cancelling the dialog stops the operation. Success or failure updates the status and shows a message box. |
-| `App.decode()` | Reads the path and settings, selects the decoder by suffix, and replaces the text box contents with recovered text only after decoding succeeds. Errors appear in the status and a message box. |
-
-The GUI and `carrier_info` route files by extension, while the loaders inspect
-their contents. Thus, a WebP cover named `.png` can be encoded via the PNG
-workflow, but the GUI does not currently route a `.webp` filename to that
-workflow. Encoding also leaves the selected path pointing to the cover:
-browse to the exported file before decoding.
-
-```text
-Encode button → App.encode() → settings() → save dialog
-    → encode_png() / encode_wav()
-    → loader → build_packet() → embed_packet() → write output file
-
-Decode button → App.decode() → settings()
-    → decode_png() / decode_wav()
-    → loader → decode_packet() → extract_bytes() → validate → display text
-```
-
-The `if __name__ == "__main__":` block runs `App().mainloop()` when the script
-is launched directly. The event loop waits for user actions and runs the
-connected handlers. Importing `steg_app` lets another script use its functions
-without opening the GUI.
-
-## Using the functions without the GUI
-
-Run this from the project directory to use the included sample cover:
-
-```python
-from steg_app import carrier_info, encode_png, decode_png
-
-start = 7
-lsb_count = 2
-print(carrier_info("sample_cover.png", start, lsb_count))
-
-encode_png(
-    "sample_cover.png", "sample_cover_stego.png", "Hello, hidden world!",
-    start=start, lsb_count=lsb_count,
-)
-message = decode_png("sample_cover_stego.png", start=start, lsb_count=lsb_count)
-print(message)  # Hello, hidden world!
-```
-
-For WAV, use `encode_wav` and `decode_wav` with WAV paths and the same argument
-pattern. Always decode the exported file with the matching start and LSB count.
-
-## Tests
-
-Run the regression tests from the project directory:
+To run the automated positive/negative test cases (no browser needed):
 
 ```bash
-python -m unittest -v
+python tests/run_demo.py
 ```
 
-`test_steg_app.py` verifies that a WebP cover named `.png` exports as a genuine
-PNG, preserves its source file, and recovers the hidden text. It also verifies
-that decoding rejects that original WebP, and checks PNG round trips across
-seven image modes and all eight LSB settings, including alpha preservation.
-These tests exercise the PNG functions; they do not automate the GUI or test
-the WAV workflow.
+This writes `test_evidence/demo_log.json` and the stego files it produced, and prints a PASS/FAIL table for every required case.
 
-## Chi-square steganalysis
+## How the required features map to the implementation
 
-The separate `steg_analysis.py` module performs basic steganalysis without
-changing the analysed file. `steg_analysis_cli.py` provides its command-line
-interface. Run it with:
+| Spec requirement | Where |
+|---|---|
+| Selectable LSBs 1–8 | `backend/stego/bitstream.py` (generic `embed_bits`/`extract_bits`), GUI slider |
+| 16-bit / 32-bit PCM audio | `backend/stego/audio_lsb.py` auto-detects sample width from the WAV header |
+| Selectable, secured start location (FR7) | `backend/stego/start_location.py` — manual offset **or** passphrase-derived (see "Innovation" below) |
+| Payload = media ID, timestamp, hash, nonce, team metadata (FR3) | `backend/stego/payload.py` container format |
+| Digital signature sign/verify (FR4) | `backend/stego/crypto_utils.py`, RSA-2048 / PKCS#1v1.5 / SHA-256 |
+| Image & audio embed/extract (FR5/FR6/FR8) | `backend/stego/image_lsb.py`, `backend/stego/audio_lsb.py`, `backend/stego/pipeline.py` |
+| Video cover object (optional challenge) | `backend/stego/video_lsb.py` — audio-track embedding, see below |
+| Auto-detecting single drop zone (no cover-type pre-selection) | `frontend/app.js` `detectCoverType()`, wired into the cover/stego dropzones |
+| Hash verification (FR9) | payload hash **and** a "stable cover hash" (LSBs masked) — see below |
+| Verdict generation (FR10) | `payload.read_and_verify()` / `pipeline.decode()` |
+| Positive & negative cases (FR11) | `tests/run_demo.py`, and the GUI's built-in "negative-case tools" (tamper button, decoy-key button, wrong-passphrase field) |
+| Payload types incl. hiding an audio/MP3 file | GUI "Payload type" selector (text / file / audio); any binary payload is supported generically |
+| Drag-and-drop, single page, no hard-coding | `frontend/index.html` + `frontend/app.js` |
+| Synchronous and asynchronous decode | `/api/decode?mode=sync` (blocks and returns the result) vs `mode=async` (returns a `job_id`, worked on a background thread pool in `backend/stego/jobs.py`, polled via `/api/jobs/<id>`) |
+| Cover/payload capacity check | `/api/capacity`, live capacity bar in the Encode panel |
+| No crashes | every route in `backend/app.py` and every stage of `pipeline.decode()` catches its own exceptions and returns a structured verdict/error instead of a 500/traceback |
 
-```bash
-python steg_analysis_cli.py sample_cover.png
-python steg_analysis_cli.py sample_cover.wav
+## Design: the verification payload and verdicts
+
+Each stego file carries a small binary container (see the docstring in `backend/stego/payload.py`) with a magic marker, metadata (media ID, ISO timestamp, nonce, filename/mime, team metadata, and the cover's "stable hash"), a SHA-256 hash of the hidden data, an RSA signature, and the data itself. Header length fields are 16-bit (they're always small); the payload's own length field is 32-bit so a hidden file (e.g. an MP3) is not limited to 64KB.
+
+Three independent checks produce the verdict:
+
+1. **Signature valid?** — verifies `sign(payload_hash ‖ sha256(metadata))` with the public key. Catches metadata/hash forgery and "wrong signer".
+2. **Payload hash match?** — recomputed SHA-256 of the *extracted* data vs. the signed hash. Catches corruption/edits to the hidden data itself, even though the signature (over the hash, not the data) still checks out.
+3. **Cover hash match?** — the metadata carries a SHA-256 of the cover with its lowest `num_lsb` bits masked to zero, taken *before* embedding. Because masking removes exactly the bits embedding will change, this hash is identical immediately after embedding and lets a verifier detect whether the *visible/audible* part of the file (i.e., everything except the hidden payload) was altered after signing — something a naive "hash the whole file" approach cannot do, since embedding itself always changes the whole-file hash.
+
+If the magic marker isn't found at the derived/typed start location at all, the verdict is **Wrong Start Location** (passphrase mode) or **Payload Missing** (manual mode); any other malformed/unreadable container is **Cannot Verify**.
+
+## Start-location design & security (FR7, Learning Outcome 6)
+
+Two interchangeable modes, chosen in the GUI:
+
+- **Manual offset** — an exact carrier-unit index (not top-left/index 0). Transparent for teaching the mechanics, but the offset must be communicated to the verifier out-of-band; guessing it means a brute-force search over the whole file.
+- **Passphrase-derived (default/recommended)** — `offset = HMAC-SHA256(passphrase, stable_cover_hash) mod usable_capacity`. The offset is **never stored anywhere**; it is re-derived independently by encoder and verifier from a shared secret passphrase and the cover's own content hash. This means (a) an attacker without the passphrase must brute-force the passphrase space rather than a small offset space, and (b) a stego file cannot be replayed against a different cover file to fool a verifier, since the offset is bound to that specific cover's hash.
+
+**Limitation, honestly stated**: this is security by a shared secret, not perfect secrecy — a sufficiently weak/short passphrase is brute-forceable, and neither mode hides the *existence* of a payload from steganalysis (see "Limitations" below).
+
+## Video cover object (optional challenge, spec section 8)
+
+Rather than embedding in video *frames* — which would need a lossless video codec and a much larger/more fragile pipeline, since standard H.264/MP4 compression would destroy any LSBs written into pixels — this hides the payload in the video's **audio track**, reusing the exact same, already-tested audio LSB code:
+
+```
+encode: video --[ffmpeg: demux audio as PCM16 WAV]--> normal audio LSB embed
+             --[ffmpeg: remux stego WAV back, video stream copied bit-for-bit]--> stego video (.mkv)
+
+decode: stego video --[ffmpeg: demux audio as PCM16 WAV]--> normal audio LSB extract/verify
 ```
 
-Useful options include:
+The video stream is always stream-copied (`-c:v copy`, never re-encoded), so picture quality is completely unaffected. ffmpeg itself is not a system dependency — it ships as a portable binary via the `imageio-ffmpeg` pip package (see `backend/stego/video_lsb.py`). Trade-offs, stated honestly:
 
-```text
---block-size 4096       carrier values tested in each block
---max-lsb 8             highest LSB depth tested
---threshold 0.99        p-value that marks a block as suspicious
---no-packet-search      use blind chi-square analysis only
---json                  return structured JSON
+- The source video must already **have an audio track** — a silent video has nothing to embed into and is rejected with a clear error.
+- Because standard containers like MP4 don't support raw PCM audio, the stego output is always produced as a **Matroska (.mkv)** file (playable in VLC and most modern players/browsers, though not universally — e.g. not natively in Safari).
+- The remux deliberately does **not** use ffmpeg's `-shortest` flag: encoders like AAC pad/prime the audio stream by a handful of samples relative to the video's nominal duration, and trimming to the shorter stream risks silently cutting off part of the embedded container. The full audio track (with payload) is always preserved, at the cost of a sub-frame, inaudible audio/video duration mismatch in rare cases.
+
+## Innovation (FR13, Learning Outcome 7)
+
+Beyond the baseline fixed-location/single-LSB demo, this implementation adds:
+
+1. **Passphrase-derived, cover-bound start location** (above) instead of a fixed or purely-manual offset — turns "where is the payload" into a keyed secret rather than a constant.
+2. **The stable/LSB-masked cover hash**, letting the verifier distinguish "the payload was tampered" from "the cover itself was tampered" from "everything is fine" — three distinct, individually meaningful failure modes instead of one generic "hash mismatch".
+3. **Generic payload container** — the same format and code path hides a short text string, an arbitrary file, or an audio/MP3 file; the GUI exposes this as one payload-type selector rather than three separate tools.
+4. **Video cover object via audio-track embedding** (optional challenge, above) — reuses the audio pipeline unchanged rather than building a second, riskier frame-based system.
+5. **Auto-detecting drop zones** — one drop target per side (encode/decode) accepts any supported file and figures out image/audio/video for itself, instead of requiring the type to be pre-selected.
+6. **Synchronous vs. asynchronous decode** as a first-class, user-visible choice (not just an implementation detail), demonstrating both a blocking verification call and a background-threaded one with progress polling.
+7. **Built-in negative-case tooling in the GUI itself** (bit-flip tamper button, decoy-key button, wrong-passphrase field) so all required negative cases can be produced live during the demo without pre-preparing corrupted files.
+
+## Limitations (Learning Outcome 8, spec section 11 criterion 7)
+
+- **LSB replacement is not robust**: any re-compression, resampling, or format conversion of the stego file destroys the payload (this is why PNG/WAV — lossless formats — are required, not JPEG/MP3 covers).
+- **Not steganalysis-resistant**: naive LSB replacement is statistically detectable (e.g. chi-square/RS analysis) by anyone looking for it; this project does not attempt to defeat steganalysis (see "Optional Challenge" in the spec).
+- **When `num_lsb = 8`**, every bit of every carrier byte is available to the payload, so there is no "untouched high bits" region left for the cover-hash check to protect — cover-level tampering then can only be caught if it happens to land inside the embedded container. This is a direct, explainable trade-off between capacity and the cover-integrity check.
+- **Passphrase strength is the user's responsibility**: a weak passphrase makes the derived start location guessable via brute force.
+- **Single symmetric passphrase / single RSA key pair** in this demo — a production system would want per-file keys/passphrases and a proper PKI instead of one local key pair.
+- **Video capacity is limited by the audio track alone** (video frames carry no payload), and a video with no audio track cannot be used as a cover at all.
+
+## Project structure
+
+```
+backend/
+  app.py                 Flask routes (REST API + serves frontend/)
+  stego/
+    bitstream.py          generic LSB read/write over a numpy carrier array
+    crypto_utils.py        SHA-256, RSA-2048 keygen/sign/verify, stable cover hash
+    start_location.py      manual / passphrase-derived start-location resolution
+    payload.py              container format, build + verify logic, verdicts
+    image_lsb.py            PNG cover loading/saving as a carrier array
+    audio_lsb.py             WAV 16/32-bit cover loading/saving as a carrier array
+    video_lsb.py              video <-> audio-track demux/remux via bundled ffmpeg
+    pipeline.py                 ties the above into encode()/decode()/capacity_check()
+    jobs.py                       background job registry for async decode
+  keys/                    generated RSA key pair (private key git-ignored)
+frontend/
+  index.html / style.css / app.js    single-page drag-and-drop GUI (auto-detects cover type)
+scripts/make_samples.py    generates sample PNG/WAV/MP4 cover files
+tests/run_demo.py          scripted positive/negative test-case runner
+docs/                       declaration-of-originality / contribution-statement templates
+samples/                    generated sample cover files (git-ignored content, folder kept)
+test_evidence/              output of tests/run_demo.py (screenshots from the live demo go here too)
 ```
 
-For PNG files, the analyser reads RGB channel values and excludes alpha. For
-WAV files, it reads the least-significant byte of every interleaved PCM sample.
-This matches the carrier mapping used by `steg_app.py`.
+## Suggested demo flow (fits the 25-minute slot)
 
-### How the chi-square test works
-
-LSB replacement tends to make related values occur at similar rates. At one
-LSB, the analyser compares pairs such as `(0, 1)`, `(2, 3)`, and `(254, 255)`.
-At two LSBs it compares groups of four, and at higher depths it compares groups
-of `2 ** lsb_count` values. For each block it calculates:
-
-```text
-chi-square = sum((observed - expected)² / expected)
-```
-
-The p-value estimates how closely the values inside those groups match. A
-value near `1` means the frequencies are unusually equal and therefore
-consistent with LSB replacement. The report shows the number and fraction of
-flagged blocks, maximum p-value, and longest consecutive run for every depth.
-Blocks are used because a payload may occupy only part of a file; one test over
-the entire carrier could dilute that local signal.
-
-### Packet confirmation
-
-Chi-square analysis is probabilistic. Natural or computer-generated media can
-already contain evenly distributed values and cause false positives. Small,
-repetitive, or non-random messages may cause false negatives. Compression,
-editing, and a payload occupying much less than one block also weaken the
-signal. A statistical verdict therefore does not prove that data is hidden.
-
-To detect short outputs from this specific prototype, the analyser also checks
-all eight LSB depths for an intact `STEG1` marker at an unknown start index. It
-then reads the declared message length and validates its CRC32 and UTF-8 data.
-A valid result is reported as `confirmed`; it also reveals the start index,
-LSB count, and message byte length without displaying the message. Disable
-this compatibility check with `--no-packet-search` for blind chi-square-only
-analysis.
-
-The core API returns dataclasses that can be used by another Python program:
-
-```python
-from steg_analysis import analyse_file
-
-result = analyse_file("sample_cover_stego.png")
-print(result.verdict, result.confidence)
-for packet in result.packet_evidence:
-    print(packet.start, packet.lsb_count, packet.crc_valid)
-```
-
-`test_steg_analysis.py` verifies detection of PNG outputs at every supported
-LSB depth, detection of a WAV output, statistical flagging of a larger payload,
-absence of packet confirmation for the clean cover, and input validation.
-
-## Important limitations
-This is only a steganography prototype, not the complete assignment.
-
-It does **not** yet provide:
-- encryption/confidentiality
-- SHA-256 or another cryptographic integrity hash
-- digital signatures
-- protected/derived start locations
-- robust survival through JPEG, MP3/AAC, resizing or resampling
-- attack simulation
-- resistance to advanced or format-independent steganalysis
-
-Anyone who knows the encoding method, LSB count and start location can extract the message.
-
-## Suggested full-assignment architecture
-
-```text
-verification metadata / message
-            ↓
-       cryptographic hash
-            ↓
-        digital signature
-            ↓
-          packet
-        ↙        ↘
-   PNG embed    WAV embed
-```
-
-Verification reverses the process:
-
-```text
-PNG/WAV extract
-      ↓
-    packet
-      ↓
-verify signature
-      ↓
-verify cryptographic hash
-      ↓
-verdict
-```
-
-Keeping the cryptographic layer separate from the PNG/WAV carrier functions means the prototype can be extended without rewriting the steganography core.
+1. Show the empty GUI, generate a key pair, briefly explain the payload container and start-location design (Learning Outcomes 1, 3, 6).
+2. **Positive — image**: drag `samples/cover_image.png`, pick a short (Learning-Outcome) message, encode, send to Party B, decode → Authentic.
+3. **Positive — audio**: same with `samples/cover_audio_16.wav` and the large (Project-Overview) message, using a manual start offset this time.
+4. **Capacity check negative**: try to embed something clearly too large for a cover; show the rejection message.
+5. **Negative — tampered payload**: use the "flip a bit" tool after encoding, decode → Tampered.
+6. **Negative — wrong signer**: use the "decoy key" tool, decode → Signature Invalid.
+7. **Negative — wrong start location**: change the passphrase before decoding → Wrong Start Location.
+8. **Payload variety**: hide an MP3/audio file as the payload inside the image cover, extract it, play it back.
+9. **Optional challenge — video**: drop `samples/cover_video.mp4` straight into the drop zone (no tab click needed — it auto-detects as video), encode, decode → Authentic; mention the audio-track-embedding design and its trade-offs.
+10. Wrap up with limitations and each member's contribution.

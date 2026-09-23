@@ -780,7 +780,7 @@ Acceptance:
 - Reviewer: Gerome
 - Priority: Critical for innovation
 - Depends on: `IMG-001`
-- Status: Not started
+- Status: In review
 - Related requirements: `SA-FR-001`–`SA-FR-007`
 
 Work:
@@ -795,13 +795,15 @@ Acceptance:
 - Expected small-vector results are calculated independently of production code.
 - Sources are cited without copying code blindly.
 
+Implementation note (19 Sep 2026): Code and repeatable evidence added with Codex assistance. See `docs/STEGANALYSIS_GUIDE.md` and `docs/STEGANALYSIS_IMPLEMENTATION.md`; named teammate review is still pending.
+
 #### `SA-002` — Implement chi-square pairs-of-values analysis
 
 - Owner: Kim
 - Reviewer: Jun Yong
 - Priority: Critical for innovation
 - Depends on: `SA-001`
-- Status: Not started
+- Status: In review
 
 Acceptance:
 
@@ -810,13 +812,15 @@ Acceptance:
 - Raw statistic, score, and interpretation are returned separately.
 - Empty, constant, tiny, RGB, and RGBA images are handled safely.
 
+Implementation note (19 Sep 2026): Code and repeatable evidence added with Codex assistance. See `docs/STEGANALYSIS_GUIDE.md` and `docs/STEGANALYSIS_IMPLEMENTATION.md`; named teammate review is still pending.
+
 #### `SA-003` — Implement RS analysis
 
 - Owner: Kim
 - Reviewer: Gabriel
 - Priority: Critical for innovation
 - Depends on: `SA-001`
-- Status: Not started
+- Status: In review
 
 Acceptance:
 
@@ -825,13 +829,15 @@ Acceptance:
 - Original arrays are not modified.
 - Raw results and interpretation are returned separately.
 
+Implementation note (19 Sep 2026): Code and repeatable evidence added with Codex assistance. See `docs/STEGANALYSIS_GUIDE.md` and `docs/STEGANALYSIS_IMPLEMENTATION.md`; named teammate review is still pending.
+
 #### `SA-004` — Calibrate and evaluate combined interpretation
 
 - Owner: Kim
 - Reviewer: Gerome
 - Priority: Critical for innovation
 - Depends on: `SA-002`, `SA-003`, `IMG-004`
-- Status: Not started
+- Status: In review
 
 Work:
 
@@ -847,19 +853,23 @@ Acceptance:
 - Evaluation includes natural images and does not use only the training/calibration samples as proof.
 - Limitations are included alongside results.
 
+Implementation note (19 Sep 2026): Code and repeatable evidence added with Codex assistance. See `docs/STEGANALYSIS_GUIDE.md` and `docs/STEGANALYSIS_IMPLEMENTATION.md`; named teammate review is still pending.
+
 #### `SA-005` — Integrate Steganalysis view and report
 
 - Owner: Matthias
 - Reviewer: Kim
 - Priority: High
 - Depends on: `SA-004`, `GUI-001`
-- Status: Not started
+- Status: In review
 
 Acceptance:
 
 - The GUI shows both technique results, combined indication, and limitations.
 - Analysis remains separate from the cryptographic verdict.
 - A secret-safe analysis report can be exported.
+
+Implementation note (19 Sep 2026): Code and repeatable evidence added with Codex assistance. See `docs/STEGANALYSIS_GUIDE.md` and `docs/STEGANALYSIS_IMPLEMENTATION.md`; named teammate review is still pending.
 
 #### `SA-006` — Add supplementary WAV LSB statistics
 
@@ -1302,7 +1312,7 @@ This section should be updated at least once per working session.
 | PNG carrier | Gabriel | Not started | Save/reopen byte round trip |
 | WAV carrier | Jian Xuan | Not started | Playable save/reopen byte round trip |
 | GUI | Matthias | Not started | Navigable shell using service stubs |
-| Steganalysis | Kim | Not started | Verified small-vector calculations |
+| Steganalysis | Kim | In review | 28 automated checks and 100 evaluation cases recorded; obtain peer review and expand natural-image evaluation |
 | Verdicts, tests, evidence | Gerome | Not started | Verdict table unit tests and fixture layout |
 
 The next project action is `SETUP-001`, followed immediately by `DES-001`, `PAY-001`, `CORE-001`, and the first PNG/WAV validation spikes.
