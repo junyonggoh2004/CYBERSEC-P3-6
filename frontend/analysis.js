@@ -32,7 +32,7 @@
   }
   function updateSource() {
     byId("analysis-source").textContent = selectedFile
-      ? `${encodingContext ? "Encoder output (exact download bytes)" : "Manual upload"}: ${selectedFile.name} - ${selectedFile.size.toLocaleString()} bytes`
+      ? `${encodingContext ? "Encoder output" : "Manual upload"}: ${selectedFile.name}`
       : "Select a PNG, or use 'Analyse this stego PNG' after encoding.";
   }
   function setBusy(value) {
@@ -49,6 +49,8 @@
   byId("analysis-window").addEventListener("input", clearResult);
 
   function render(result) {
+    byId("analysis-details").open = false;
+    byId("analysis-raw-details").open = false;
     byId("analysis-file-details").textContent = `${result.input.filename} - ${result.input.byte_length.toLocaleString()} bytes; ${result.image.width} x ${result.image.height}, ${result.image.mode}.`;
     byId("analysis-file-hash").textContent = `SHA-256 of analysed PNG: ${result.file_sha256}`;
     byId("analysis-encoding").hidden = !result.input.encoding_context;
@@ -58,7 +60,7 @@
       byId("analysis-encoding-details").textContent = `LSB depth: ${c.num_lsb}; start: ${c.start_unit} carrier units; signed container: ${c.container_bytes.toLocaleString()} bytes; available capacity from start: ${c.capacity_bytes.toLocaleString()} bytes; capacity used: ${usage}.`;
     }
     byId("analysis-category").textContent = result.combined.category;
-    byId("analysis-scores").textContent = `Whole-image chi-square tail score: ${format(result.scores.chi_square, true)} (threshold ${result.combined.thresholds.chi_square}); RS asymmetry: ${format(result.scores.rs)} (threshold ${result.combined.thresholds.rs}).`;
+    byId("analysis-scores").textContent = `Chi-square tail score: ${format(result.scores.chi_square, true)}  |  RS score: ${format(result.scores.rs)}`;
     byId("analysis-interpretation").textContent = result.scores.chi_square == null
       ? "Insufficient data for the whole-image chi-square score."
       : result.scores.chi_square < result.combined.thresholds.chi_square
@@ -132,10 +134,10 @@
       result.input = { filename: file.name, byte_length: file.size,
         source: context ? "encoder_output" : "manual_upload", sha256_matches_selected_file: true,
         encoding_context: context, context_origin: context ? "Browser snapshot of encoder response; not inferred or independently verified" : null };
-      result.display_version = "steganalysis-ui-2";
+      result.display_version = "steganalysis-ui-3";
       render(result);
       report = result;
-      byId("analysis-status").textContent = `Finished: ${file.name}. Analysed bytes match the selected file's SHA-256.`;
+      byId("analysis-status").textContent = "Analysis complete. File match verified.";
     } catch (error) {
       clearResult();
       byId("analysis-status").textContent = error.message;

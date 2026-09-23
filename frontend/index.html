@@ -228,7 +228,7 @@
 
   <section class="card wide" id="analysis-card">
     <h2>PNG Steganalysis <span class="hint">Chi-square and RS analysis</span></h2>
-    <p>Look for statistical signs of LSB replacement. This does not authenticate a file or recover its payload.</p>
+    <p class="hint">Check a PNG for signs of hidden data.</p>
     <div class="field-grid">
       <label class="field"><span>PNG to analyse (RGB, RGBA, or grayscale)</span>
         <input type="file" id="analysis-file" accept="image/png,.png" /></label>
@@ -240,9 +240,17 @@
       <button type="button" id="btn-export-analysis" class="btn btn-small" disabled>Export analysis JSON</button>
     </div>
     <p id="analysis-source">Select a PNG, or use “Analyse this stego PNG” after encoding.</p>
-    <p>Window size affects regional results below. The whole-image score and combined category use the full image.</p>
     <p id="analysis-status" role="status" aria-live="polite"></p>
     <div id="analysis-result" hidden>
+      <div class="analysis-overview">
+        <h3>Result: <span id="analysis-category"></span></h3>
+        <p id="analysis-scores"></p>
+        <p class="hint">Statistical indication only; hidden data can be missed.</p>
+      </div>
+      <details id="analysis-details" class="analysis-details">
+        <summary>Details and explanation</summary>
+        <p id="analysis-interpretation"></p>
+        <p>Chi-square tail scores and RS asymmetry are statistical clues, not probabilities of hidden text. Thresholds are provisional.</p>
       <h3>Analysed file</h3>
       <p id="analysis-file-details"></p>
       <p class="analysis-hash" id="analysis-file-hash"></p>
@@ -251,18 +259,17 @@
         <p id="analysis-encoding-details"></p>
         <p>These settings came from the encoder response. They are not inferred by steganalysis and do not independently confirm payload recovery. Use Verify to check extraction and signatures.</p>
       </div>
-      <h3>Blind statistical results — whole image</h3>
-      <h3 id="analysis-category"></h3>
-      <p id="analysis-scores"></p>
-      <p id="analysis-interpretation"></p>
-      <p>Thresholds are provisional. A high score is not a probability that hidden data exists.</p>
+      <h3>Whole-image results by channel</h3>
+      <p>Chi-square is the test statistic; df means degrees of freedom; the tail score is its p-value. The summary uses the median channel scores.</p>
       <div class="analysis-table-scroll"><table class="log-table"><thead><tr><th>Channel</th><th>Chi-square / df / tail score</th><th>RS +mask R/S/U</th><th>RS inverse R/S/U</th><th>RS score</th></tr></thead><tbody id="analysis-rows"></tbody></table></div>
       <h3>Chi-square window results</h3>
+      <p>Window size changes these regional results, not the whole-image score or verdict.</p>
       <p id="analysis-window-summary"></p>
       <p>Windows are consecutive values within each colour plane. Positions are zero-based, with the end excluded. Inspecting many windows can produce chance high scores; window peaks do not change the combined category.</p>
       <div class="analysis-table-scroll analysis-windows"><table class="log-table"><thead><tr><th>Channel</th><th>Window</th><th>Start–end</th><th>Values</th><th>Statistic / df</th><th>Tail score</th><th>Observation</th></tr></thead><tbody id="analysis-window-rows"></tbody></table></div>
       <ul id="analysis-limitations"></ul>
-      <details><summary>Raw statistics, paired histograms, and windows</summary><pre id="analysis-json"></pre></details>
+      <details id="analysis-raw-details"><summary>Raw statistics (JSON)</summary><pre id="analysis-json"></pre></details>
+      </details>
     </div>
   </section>
 

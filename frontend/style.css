@@ -291,3 +291,14 @@ details summary { cursor: pointer; font-size: 0.82rem; color: var(--text-dim); }
     --text: #1b2437; --text-dim: #5b6479;
   }
 }
+
+/* Keep the verdict visible and supporting evidence collapsed. */
+.analysis-overview { padding: 16px; background: var(--bg-soft); border: 1px solid var(--card-border); border-radius: 10px; }
+.analysis-overview h3 { margin: 0 0 10px; }
+.analysis-overview p { margin: 8px 0 0; overflow-wrap: anywhere; }
+#analysis-scores { font-variant-numeric: tabular-nums; }
+.analysis-details { margin-top: 12px; padding: 14px; border: 1px solid var(--card-border); border-radius: 10px; }
+.analysis-details > summary { color: var(--text); font-weight: 600; }
+.analysis-details > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+#analysis-source, #analysis-status { margin: 0; font-size: .82rem; color: var(--text-dim); }
+#analysis-status:empty { display: none; }
