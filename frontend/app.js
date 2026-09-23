@@ -284,21 +284,33 @@ function chart(parent,title,series,labels,maxY=null,minY=0) {
 function drawComparison(result) {
   $("comparison-results").hidden=false;
   metrics("comparison-metrics",[["Changed values",result.changed_percent+"%"],["Max difference",result.max_absolute_difference],["Mean squared error",result.mse.toPrecision(4)],["PSNR",result.psnr_db===null?"Identical":result.psnr_db.toFixed(2)+" dB"]]);
-  $("histograms").hidden=!result.histograms; $("waveforms").hidden=!result.waveforms; $("difference-panel").hidden=!result.histograms; $("zoom-field").hidden=!result.histograms;
+  $("histograms").hidden=!result.histograms; $("waveforms").hidden=!result.waveforms;
+  $("difference-panel").hidden=!result.histograms; $("zoom-field").hidden=!result.histograms;
   $("histogram-charts").replaceChildren();$("waveform-charts").replaceChildren();
   if(result.histograms) {
     Object.entries(result.histograms).forEach(([name,h])=>chart($("histogram-charts"),name+" channel",[{values:h.before},{values:h.after}],"Intensity 0 → 255 · y = value count"));
-    $("difference-image").src="data:image/png;base64,"+result.difference_png_base64;
-    $("difference-caption").textContent="Absolute RGB differences amplified "+result.difference_gain.toFixed(1)+"× for visibility; this is not the actual stego appearance.";
+    state.differenceViews={
+      difference:{image:result.difference_png_base64,caption:"Absolute RGB differences amplified "+result.difference_gain.toFixed(1)+"× for visibility; this is not the actual stego appearance."},
+      mask:{image:result.change_mask_png_base64,caption:"White marks a pixel whose R/G/B value differs between the two objects; black is unchanged. A carrier value that already matched the bit being written stays unchanged and will not be marked here."},
+      highlighted:{image:result.highlighted_difference_png_base64,caption:"Same amplified difference, blended onto the cover in magenta so changed areas can be located in context."+(result.alpha_note?" "+result.alpha_note:"")},
+    };
+    renderDifferenceView();
   }
   if(result.waveforms) {
     for(const [key,label] of [["before","Original"],["after","Stego"],["difference","Sample difference"]]) {
       const values=result.waveforms[key].flat();
       chart($("waveform-charts"),label,[{values}], "Time 0 → "+result.cover_info.duration_seconds+" seconds · channel 1",1,-1);
     }
+    $("channel-metrics").innerHTML=table(["Channel","Changed samples","Total samples","Max difference","RMS difference"],
+      result.per_channel.map(c=>[c.channel,c.changed_samples,c.total_samples,c.max_absolute_difference,c.rms_difference.toPrecision(4)]));
   }
-  const {difference_png_base64,...readable}=result;$("comparison-data").textContent=pretty(readable);
+  const {difference_png_base64,change_mask_png_base64,highlighted_difference_png_base64,...readable}=result;$("comparison-data").textContent=pretty(readable);
 }
+function renderDifferenceView() {
+  const view=state.differenceViews?.[$("difference-view").value]; if(!view)return;
+  $("difference-view-image").src="data:image/png;base64,"+view.image; $("difference-view-caption").textContent=view.caption;
+}
+$("difference-view").onchange=renderDifferenceView;
 
 $("analysis-file").onchange=()=>{state.analysisFile=$("analysis-file").files[0];preview("analysis-preview",state.analysisFile);clearAnalysis();};
 function clearAnalysis() {

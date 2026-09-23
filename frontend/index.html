@@ -88,8 +88,12 @@
 <div id="comparison-metrics" class="metric-grid"></div>
 <label class="field" id="zoom-field">Linked image zoom<input id="compare-zoom" type="range" min="1" max="4" step=".1" value="1"></label>
 <div id="histograms"><h3>Overlaid intensity histograms</h3><p class="hint"><span class="legend before"></span> Original (solid) <span class="legend after"></span> Stego (dashed). Matching axes, 256 intensity bins per channel.</p><div id="histogram-charts" class="chart-grid"></div></div>
-<div id="waveforms" hidden><h3>Aligned waveforms · channel 1</h3><p class="hint">Both waveforms use the same time buckets and full-scale amplitude. The difference uses that same scale.</p><div id="waveform-charts"></div></div>
-<details id="difference-panel"><summary>Amplified image difference</summary><p id="difference-caption" class="hint"></p><img id="difference-image" class="difference-image" alt="Amplified absolute pixel differences"></details>
+<div id="waveforms" hidden><h3>Aligned waveforms · channel 1</h3><p class="hint">Both waveforms use the same time buckets and full-scale amplitude. The difference uses that same scale.</p><div id="waveform-charts"></div><div id="channel-metrics" class="table-wrap"></div></div>
+<details id="difference-panel"><summary>Difference views</summary>
+<label class="field">View<select id="difference-view"><option value="difference">Amplified image difference</option><option value="mask">Change mask</option><option value="highlighted">Difference highlighted on the cover</option></select></label>
+<img id="difference-view-image" class="difference-image" alt="Selected difference view">
+<p id="difference-view-caption" class="hint"></p>
+</details>
 <details><summary>Exact comparison measurements</summary><pre id="comparison-data"></pre></details>
 </section>
 </section>
