@@ -1,284 +1,109 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Stego Integrity Verifier</title>
-<link rel="stylesheet" href="style.css" />
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stego Integrity Verifier · P3-6</title>
+<link rel="stylesheet" href="style.css">
+<script>try { document.documentElement.dataset.theme = localStorage.getItem("stego-theme") || "light"; } catch (_) {}</script>
+<script src="app.js" defer></script>
 </head>
 <body>
-<header class="topbar">
-  <div class="brand">
-    <span class="brand-icon">🔐</span>
-    <div>
-      <h1>Stego Integrity Verifier</h1>
-      <p class="subtitle">LSB steganography · SHA-256 hashing · RSA-2048 digital signatures</p>
-    </div>
-  </div>
-  <div class="key-panel">
-    <button id="btn-gen-keys" class="btn btn-ghost">Generate new key pair</button>
-    <button id="btn-show-key" class="btn btn-ghost">View public key</button>
-    <span id="key-status" class="key-status">Loading key…</span>
-  </div>
-</header>
-
-<nav class="quicknav" aria-label="Jump to section">
-  <a href="#encode-card">1️⃣ Protect</a>
-  <a href="#decode-card">2️⃣ Verify</a>
-  <a href="#analysis-card">Steganalysis</a>
-  <a href="#log-card">📋 Log</a>
+<header class="topbar"><div class="brand"><div><h1>Stego Integrity Verifier</h1><p class="subtitle">INF2005 ACW1 · Team P3-6 · Image &amp; audio</p></div></div><div class="key-panel"><span class="key-status" id="key-status">Loading Alice's keys…</span><button class="btn btn-ghost" id="theme">Dark theme</button></div></header>
+<nav class="quicknav" aria-label="Workspace pages">
+<a href="#protect" data-page="protect">01 Protect</a><a href="#verify" data-page="verify">02 Verify</a><a href="#compare" data-page="compare">Compare</a><a href="#analysis" data-page="analysis">Steganalysis</a><a href="#keys" data-page="keys">Alice's keys</a>
 </nav>
-
 <main class="layout">
-
-  <!-- ============================= ENCODE ============================= -->
-  <section class="card" id="encode-card">
-    <h2><span class="step-badge">1</span> Protect (Encode)</h2>
-
-    <p class="section-label">📁 Cover object</p>
-    <div class="tabbar" data-group="encode-cover-type">
-      <button class="tab active" data-value="image" type="button">🖼️ Image (PNG)</button>
-      <button class="tab" data-value="audio" type="button">🎵 Audio (WAV)</button>
-      <button class="tab" data-value="video" type="button">🎬 Video (MP4/MKV)</button>
-    </div>
-
-    <div class="dropzone" id="encode-cover-drop">
-      <input type="file" id="encode-cover-input" hidden accept=".png,.bmp,.jpg,.jpeg,.wav,.mp4,.m4v,.mkv,.mov,.avi,.webm" />
-      <div class="dz-placeholder">
-        <span class="dz-icon">⬇️</span>
-        <p>Drag &amp; drop <strong>any</strong> supported cover file here, or click to browse</p>
-        <p class="dz-hint">The cover type (image / audio / video) is detected automatically</p>
-        <p class="dz-hint" id="encode-cover-hint">PNG image required for lossless embedding</p>
-      </div>
-      <div class="dz-preview" id="encode-cover-preview" hidden></div>
-    </div>
-    <div class="info-row" id="encode-cover-info"></div>
-
-    <p class="section-label">📦 Payload — what to hide inside the cover</p>
-    <label class="field">
-      <span>Payload type</span>
-      <select id="encode-payload-type">
-        <option value="text">Text message</option>
-        <option value="file">Arbitrary file</option>
-        <option value="audio">Audio / MP3 file</option>
-      </select>
-    </label>
-
-    <div class="payload-block" id="payload-text-block">
-      <div class="quickfill-row">
-        <span>Quick-fill test payloads:</span>
-        <button type="button" class="btn btn-small" data-fill="short">Short (Learning Outcome)</button>
-        <button type="button" class="btn btn-small" data-fill="large">Large (Project Overview)</button>
-        <button type="button" class="btn btn-small" data-fill="custom">Custom confidential note</button>
-      </div>
-      <textarea id="encode-payload-text" rows="4" placeholder="Type the message to hide…"></textarea>
-    </div>
-
-    <div class="dropzone dropzone-compact" id="encode-payload-file-drop" hidden>
-      <input type="file" id="encode-payload-file-input" hidden />
-      <div class="dz-placeholder">
-        <span class="dz-icon">📎</span>
-        <p>Drag &amp; drop the payload file (e.g. a .mp3) here, or click to browse</p>
-      </div>
-      <div class="dz-preview" id="encode-payload-file-preview" hidden></div>
-    </div>
-
-    <p class="section-label">🔐 Security settings — LSB depth &amp; start location</p>
-    <div class="field-grid">
-      <label class="field">
-        <span>Number of LSBs (1–8)</span>
-        <input type="range" id="encode-num-lsb" min="1" max="8" value="1" />
-        <output id="encode-num-lsb-out">1</output>
-      </label>
-
-      <label class="field">
-        <span>Start-location mode</span>
-        <select id="encode-start-mode">
-          <option value="passphrase" selected>Passphrase-derived (recommended)</option>
-          <option value="manual">Manual offset</option>
-        </select>
-      </label>
-
-      <label class="field" id="encode-passphrase-field">
-        <span>Shared passphrase</span>
-        <input type="text" id="encode-passphrase" placeholder="e.g. correct-horse-battery-staple" />
-      </label>
-
-      <label class="field" id="encode-offset-field" hidden>
-        <span>Manual start offset (carrier units)</span>
-        <input type="number" id="encode-offset" min="0" value="0" />
-      </label>
-
-      <label class="field">
-        <span>Media ID (optional)</span>
-        <input type="text" id="encode-media-id" placeholder="auto-generated if blank" />
-      </label>
-    </div>
-
-    <div class="capacity-bar" id="encode-capacity-bar">
-      <span id="encode-capacity-text">Load a cover file to see capacity…</span>
-      <div class="capacity-track"><div class="capacity-fill" id="encode-capacity-fill"></div></div>
-    </div>
-
-    <button id="btn-encode" class="btn btn-primary btn-block" disabled>🔏 Sign &amp; Embed Payload</button>
-
-    <div class="result-panel" id="encode-result" hidden>
-      <p class="section-label">✅ Result</p>
-      <h3>Stego object produced</h3>
-      <div class="stego-preview" id="encode-stego-preview"></div>
-      <div class="kv-list" id="encode-result-kv"></div>
-      <details>
-        <summary>Verification payload metadata (signed)</summary>
-        <pre id="encode-metadata-json"></pre>
-      </details>
-      <div class="actions-row">
-        <a id="encode-download-link" class="btn btn-secondary" download>⬇️ Download stego file</a>
-        <button id="btn-send-to-decode" class="btn btn-secondary" type="button">➡️ Send to Party B (load into Decode)</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============================= DECODE ============================= -->
-  <section class="card" id="decode-card">
-    <h2><span class="step-badge">2</span> Verify (Decode)</h2>
-
-    <p class="section-label">📁 Stego file received</p>
-    <div class="tabbar" data-group="decode-cover-type">
-      <button class="tab active" data-value="image" type="button">🖼️ Image stego</button>
-      <button class="tab" data-value="audio" type="button">🎵 Audio stego</button>
-      <button class="tab" data-value="video" type="button">🎬 Video stego</button>
-    </div>
-
-    <div class="dropzone" id="decode-stego-drop">
-      <input type="file" id="decode-stego-input" hidden accept=".png,.bmp,.jpg,.jpeg,.wav,.mp4,.m4v,.mkv,.mov,.avi,.webm" />
-      <div class="dz-placeholder">
-        <span class="dz-icon">⬇️</span>
-        <p>Drag &amp; drop <strong>any</strong> received stego file here, or click to browse</p>
-        <p class="dz-hint">The cover type (image / audio / video) is detected automatically</p>
-      </div>
-      <div class="dz-preview" id="decode-stego-preview" hidden></div>
-    </div>
-    <div class="info-row" id="decode-stego-info"></div>
-
-    <div class="tamper-row">
-      <span>🧪 Negative-case tools:</span>
-      <button type="button" class="btn btn-small btn-warn" id="btn-tamper-payload">Flip a bit (simulate tampering)</button>
-      <button type="button" class="btn btn-small btn-warn" id="btn-clear-tamper">↺ Reset to original</button>
-    </div>
-
-    <p class="section-label">🔐 Security settings — must match the encoder</p>
-    <div class="field-grid">
-      <label class="field">
-        <span>Number of LSBs used (1–8)</span>
-        <input type="range" id="decode-num-lsb" min="1" max="8" value="1" />
-        <output id="decode-num-lsb-out">1</output>
-      </label>
-
-      <label class="field">
-        <span>Start-location mode</span>
-        <select id="decode-start-mode">
-          <option value="passphrase" selected>Passphrase-derived</option>
-          <option value="manual">Manual offset</option>
-        </select>
-      </label>
-
-      <label class="field" id="decode-passphrase-field">
-        <span>Shared passphrase</span>
-        <input type="text" id="decode-passphrase" placeholder="must match the encoder's passphrase" />
-      </label>
-
-      <label class="field" id="decode-offset-field" hidden>
-        <span>Manual start offset (carrier units)</span>
-        <input type="number" id="decode-offset" min="0" value="0" />
-      </label>
-    </div>
-
-    <label class="field">
-      <span>Public key to verify against (PEM)</span>
-      <textarea id="decode-public-key" rows="4" placeholder="Loaded automatically from server…"></textarea>
-    </label>
-    <div class="actions-row">
-      <button type="button" class="btn btn-small" id="btn-use-server-key">Use current server key</button>
-      <button type="button" class="btn btn-small btn-warn" id="btn-mangle-key">🧪 Use a decoy key (simulate wrong signer)</button>
-    </div>
-
-    <p class="section-label">▶️ Run verification</p>
-    <div class="actions-row">
-      <button id="btn-decode-sync" class="btn btn-primary" disabled>🔎 Decode (Synchronous)</button>
-      <button id="btn-decode-async" class="btn btn-primary" disabled>⏳ Decode (Asynchronous)</button>
-    </div>
-    <div class="async-status" id="async-status" hidden></div>
-
-    <div class="result-panel" id="decode-result" hidden>
-      <p class="section-label">✅ Result</p>
-      <div class="verdict-badge" id="verdict-badge"></div>
-      <p id="verdict-detail"></p>
-      <div class="kv-list" id="decode-result-kv"></div>
-      <details open>
-        <summary>Extracted payload</summary>
-        <div id="extracted-payload"></div>
-      </details>
-      <details>
-        <summary>Verification metadata</summary>
-        <pre id="decode-metadata-json"></pre>
-      </details>
-    </div>
-  </section>
-
-  <section class="card wide" id="analysis-card">
-    <h2>PNG Steganalysis <span class="hint">Kim's chi-square and RS analysis</span></h2>
-    <p>Look for statistical signs of LSB replacement. This does not authenticate a file or recover its payload.</p>
-    <div class="field-grid">
-      <label class="field"><span>PNG to analyse (RGB, RGBA, or grayscale)</span>
-        <input type="file" id="analysis-file" accept="image/png,.png" /></label>
-      <label class="field"><span>Chi-square window size (values per channel)</span>
-        <input type="number" id="analysis-window" min="256" max="1000000" value="65536" /></label>
-    </div>
-    <div class="actions-row">
-      <button type="button" id="btn-analyse" class="btn btn-primary">Analyse PNG</button>
-      <button type="button" id="btn-export-analysis" class="btn btn-small" disabled>Export analysis JSON</button>
-    </div>
-    <p id="analysis-status" role="status" aria-live="polite"></p>
-    <div id="analysis-result" hidden>
-      <h3 id="analysis-category"></h3>
-      <p id="analysis-scores"></p>
-      <p>Thresholds are provisional. A high score is not a probability that hidden data exists.</p>
-      <table class="log-table"><thead><tr><th>Channel</th><th>Chi-square / df / score</th><th>RS +mask R/S/U</th><th>RS inverse R/S/U</th><th>RS score</th></tr></thead><tbody id="analysis-rows"></tbody></table>
-      <ul id="analysis-limitations"></ul>
-      <details><summary>Raw statistics, paired histograms, and windows</summary><pre id="analysis-json"></pre></details>
-    </div>
-  </section>
-
-  <!-- ============================= LOG ============================= -->
-  <section class="card wide" id="log-card">
-    <h2>📋 Verification Log <span class="hint">(evidence trail for the demo)</span></h2>
-    <div class="actions-row">
-      <button id="btn-clear-log" class="btn btn-small">Clear log</button>
-      <button id="btn-export-log" class="btn btn-small">⬇️ Export log as JSON</button>
-    </div>
-    <table class="log-table">
-      <thead>
-        <tr><th>Time</th><th>Action</th><th>Cover</th><th>Verdict / Result</th><th>Details</th></tr>
-      </thead>
-      <tbody id="log-body"></tbody>
-    </table>
-  </section>
-
-</main>
-
-<div class="modal" id="key-modal" hidden>
-  <div class="modal-box">
-    <h3>Current RSA public key</h3>
-    <pre id="key-modal-content"></pre>
-    <button class="btn btn-secondary" id="key-modal-close">Close</button>
-  </div>
+<div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+<section class="page" id="page-protect" aria-labelledby="protect-title">
+<div class="workspace-intro"><p class="eyebrow">ALICE · CREATE A PROTECTED OBJECT</p><h2 id="protect-title" tabindex="-1">Hide content. Sign its record.</h2><p>Choose a carrier, review what fits, then create a stego file for Bob. Signing and hiding do not encrypt the content.</p></div>
+<form id="protect-form">
+<div class="workflow-grid">
+<section class="card"><h3><span class="step-badge">1</span> Original cover</h3><p class="hint">PNG image or 16/32-bit PCM WAV audio.</p>
+<label class="field">Cover object<input id="cover-file" name="cover_file" type="file" accept=".png,.wav" required></label>
+<div id="cover-preview" class="mini-preview"><p class="empty">Choose a cover to see its preview.</p></div>
+<div id="cover-properties" class="info-row"></div></section>
+<section class="card"><h3><span class="step-badge">2</span> Hidden content</h3>
+<label class="field">Content type<select id="payload-type" name="payload_type"><option value="text">Text message</option><option value="audio">Audio file inside image</option></select></label>
+<div id="text-content"><div class="actions"><button type="button" class="btn btn-small" id="short-text">Short example</button><button type="button" class="btn btn-small" id="long-text">Long example</button></div>
+<label class="field">Message<textarea id="payload-text" name="payload_text" rows="4" placeholder="Write a message for Bob" required></textarea></label></div>
+<label id="file-content" class="field" hidden>Content file<input id="payload-file" name="payload_file" type="file" accept="audio/*"></label>
+<div id="payload-preview" class="mini-preview" hidden></div>
+</section></div>
+<section class="card"><h3><span class="step-badge">3</span> Protection settings</h3>
+<div class="field-grid">
+<label class="field">Hash algorithm<select name="hash_algorithm" id="hash-algorithm"><option value="SHA-256">SHA-256 (default)</option><option value="SHA-512">SHA-512</option></select><span class="hint">Used for content, record signing and stable-cover integrity.</span></label>
+<label class="field">Alice's signing key<select name="key_id" id="signing-key" required></select><span class="hint">Alice's private key signs; her public key is shared with Bob.</span></label>
+<label class="field">Number of least significant bits<select name="num_lsb" id="lsb"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select><span class="hint">Lowest bits per image-channel value or PCM sample. Never increased automatically.</span></label>
+<label class="field">Start-location method<select name="start_mode" id="start-mode"><option value="manual">Manual offset</option><option value="passphrase">Derived from shared passphrase</option></select></label>
+<label class="field" id="offset-field">Start index (zero-based)<input type="number" id="offset" name="manual_offset" min="1" step="1" value="100" required><span class="hint">Start beyond the first carrier value.</span></label>
+<label class="field" id="secret-field" hidden>Shared start-location passphrase<input type="password" name="passphrase" id="secret" autocomplete="off"><span class="hint">Shared separately. Concealed and omitted from reports.</span></label>
+<label class="field">Media ID<input name="media_id" id="media-id" value="P3-6-DEMO-001" maxlength="100"></label>
 </div>
-
-<footer class="footer">
-  INF2005 ACW1 — Steganographic Image &amp; Audio Integrity Verification with Digital Signature-Based Authentication
-</footer>
-
-<script src="app.js"></script>
-<script src="analysis.js"></script>
-</body>
-</html>
+<div class="bit-lesson"><div><p class="eyebrow">HOW LSB REPLACEMENT WORKS</p><div id="bits" class="bits" aria-label="Selected low-order bits"></div></div><p id="bit-explanation"></p></div>
+<p id="scope-note" class="hint"></p>
+<details><summary>Team metadata</summary><label class="field">JSON object<textarea id="team-metadata" name="team_metadata" rows="2">{"team":"P3-6"}</textarea></label></details>
+</section>
+<section class="card"><h3><span class="step-badge">4</span> Review capacity &amp; record</h3>
+<p id="prepare-status" class="hint" role="status">Choose a cover and content to calculate the complete package size.</p>
+<div id="capacity-metrics" class="metric-grid"></div><progress id="capacity-bar" max="100" value="0" aria-label="Capacity used"></progress>
+<div class="actions"><button type="button" class="btn" id="review">Review capacity</button><button class="btn btn-primary" id="protect-button" disabled>Sign &amp; create stego file</button></div>
+<details><summary>Verification record preview</summary><p class="hint">Draft values. Timestamp and nonce are regenerated when the final file is created.</p><pre id="record-preview">No record yet.</pre></details>
+<details><summary>Embedding details &amp; capacity at each depth</summary><div id="embedding-details" class="table-wrap">No measurements yet.</div></details>
+</section>
+</form>
+<section class="card" id="created" hidden><p class="eyebrow">LAST CREATED OBJECT</p><h3>Ready to send to Bob</h3><div id="stego-preview" class="mini-preview"></div><p id="created-info"></p>
+<div class="actions"><button class="btn btn-primary" id="download-stego">Download stego file</button><button class="btn" data-go="compare">View comparison</button><button class="btn" id="use-for-verify">Open in Verify (local demo)</button><button class="btn" id="analyse-created">Analyse stego PNG</button></div>
+<p class="hint">For the assignment, also demonstrate an actual file transfer and Bob's downloaded copy. Share Alice's public key and extraction settings separately.</p>
+<details><summary>Final verification record</summary><pre id="final-record"></pre></details>
+</section>
+</section>
+<section class="page" id="page-verify" hidden aria-labelledby="verify-title">
+<div class="workspace-intro"><p class="eyebrow">BOB · CHECK A RECEIVED OBJECT</p><h2 id="verify-title" tabindex="-1">Extract and verify.</h2><p>Use the received file, agreed extraction settings and Alice's trusted public key. The original cover is not needed.</p></div>
+<form id="verify-form" class="card">
+<div class="workflow-grid"><div><label class="field">Received stego object<input id="received-file" type="file" accept=".png,.wav" required></label><div class="mini-preview" id="received-preview"></div></div>
+<div class="field-grid">
+<label class="field">Number of LSBs<select id="verify-lsb"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label>
+<label class="field">Start-location method<select id="verify-mode"><option value="manual">Manual offset</option><option value="passphrase">Shared passphrase</option></select></label>
+<label class="field" id="verify-offset-field">Start index<input id="verify-offset" type="number" value="100" min="0" step="1"></label>
+<label class="field" id="verify-secret-field" hidden>Shared passphrase<input id="verify-secret" type="password" autocomplete="off"></label>
+</div></div>
+<label class="field">Alice's trusted public key (PEM)<textarea id="verify-public" rows="4" placeholder="Paste or import Alice's public key" required spellcheck="false"></textarea></label>
+<div class="actions"><label class="field">Import public key<input id="public-file" type="file" accept=".pem,.pub,.txt"></label><button type="button" class="btn" id="use-public">Use selected demo public key</button><button type="button" class="btn" id="decoy-public">Use wrong key (negative case)</button></div>
+<p class="hint">Confirm the fingerprint belongs to Alice. A key bundled with an untrusted file does not establish the signer's identity.</p>
+<button class="btn btn-primary btn-block" id="verify-button">Extract &amp; verify</button><p id="verify-status" role="status" class="hint"></p>
+</form>
+<section class="card" id="verdict-card" hidden><div class="result-heading"><div><p class="eyebrow">VERIFICATION RESULT</p><h3 id="verdict-title"></h3></div><span id="reason-code" class="comparison-badge"></span></div>
+<p id="verdict-explanation"></p><div id="check-list" class="checks"></div>
+<div id="verdict-metadata" class="table-wrap"></div><p id="verdict-scope" class="hint"></p><p id="verdict-next"></p>
+<details><summary>Verification record &amp; hash evidence</summary><p id="record-trust"></p><pre id="verify-record"></pre></details>
+<div id="recovered-preview" class="mini-preview"></div><div class="actions"><button class="btn" id="download-content" disabled>Download recovered content</button><button class="btn" id="download-report">Export verification report</button></div>
+</section>
+<section class="card"><h3>Negative-case tools</h3><p class="hint">Create a modified local copy of the last protected file, then verify it. The original output remains available.</p><div class="actions"><button class="btn" id="tamper-content">Alter hidden content</button><button class="btn" id="tamper-cover">Alter cover value</button><button class="btn" id="restore-stego">Restore original stego</button></div><p class="hint" id="tamper-status"></p></section>
+</section>
+<section class="page" id="page-compare" hidden aria-labelledby="compare-title">
+<div class="workspace-intro"><p class="eyebrow">BEFORE &amp; AFTER</p><h2 id="compare-title" tabindex="-1">See what changed.</h2><p>Compare appearance and measured changes. These measurements do not determine authenticity.</p></div>
+<section class="card"><div class="actions"><button class="btn" id="compare-latest">Load last protected pair</button><label class="field">Original cover<input id="compare-original" type="file" accept=".png,.wav"></label><label class="field">Stego object<input id="compare-stego" type="file" accept=".png,.wav"></label><button class="btn btn-primary" id="compare-button">Compare objects</button></div><p id="compare-status" role="status" class="hint"></p></section>
+<div class="three-grid"><section class="card"><h3>Hidden content</h3><div id="compare-payload" class="comparison-stage"><p class="empty">Available for the last protected pair.</p></div></section><section class="card"><h3>Original cover</h3><div id="compare-before" class="comparison-stage"></div></section><section class="card"><h3>Stego object</h3><div id="compare-after" class="comparison-stage"></div></section></div>
+<section class="card" id="comparison-results" hidden>
+<div id="comparison-metrics" class="metric-grid"></div>
+<label class="field" id="zoom-field">Linked image zoom<input id="compare-zoom" type="range" min="1" max="4" step=".1" value="1"></label>
+<div id="histograms"><h3>Overlaid intensity histograms</h3><p class="hint"><span class="legend before"></span> Original (solid) <span class="legend after"></span> Stego (dashed). Matching axes, 256 intensity bins per channel.</p><div id="histogram-charts" class="chart-grid"></div></div>
+<div id="waveforms" hidden><h3>Aligned waveforms · channel 1</h3><p class="hint">Both waveforms use the same time buckets and full-scale amplitude. The difference uses that same scale.</p><div id="waveform-charts"></div></div>
+<details id="difference-panel"><summary>Amplified image difference</summary><p id="difference-caption" class="hint"></p><img id="difference-image" class="difference-image" alt="Amplified absolute pixel differences"></details>
+<details><summary>Exact comparison measurements</summary><pre id="comparison-data"></pre></details>
+</section>
+</section>
+<section class="page" id="page-analysis" hidden aria-labelledby="analysis-title">
+<div class="workspace-intro"><p class="eyebrow">OPTIONAL CHALLENGE · PNG STEGANALYSIS</p><h2 id="analysis-title" tabindex="-1">Look for signs of hidden data.</h2><p>Chi-square and RS provide statistical indicators. Their results are independent of signature and integrity verification.</p></div>
+<form id="analysis-form" class="card"><div class="field-grid"><label class="field">PNG to analyse<input id="analysis-file" type="file" accept=".png" required></label><label class="field">Chi-square window size (channel values)<input id="window-size" type="number" value="65536" min="256" max="1000000" required></label></div><div class="mini-preview" id="analysis-preview"></div><div class="actions"><button class="btn btn-primary" id="analysis-button">Run chi-square &amp; RS</button><button class="btn" type="button" id="analysis-export" disabled>Export analysis report</button></div><p id="analysis-status" role="status" class="hint"></p></form>
+<div class="workflow-grid"><section class="card"><p class="eyebrow">PAIRS OF VALUES</p><h3>Chi-square analysis</h3><p class="hint">Tests adjacent value pairs such as 100/101. A p-value is not the probability that a secret exists.</p><div id="chi-results"><p class="empty">Run analysis to see measurements.</p></div></section>
+<section class="card"><p class="eyebrow">REGULAR / SINGULAR GROUPS</p><h3>RS analysis</h3><p class="hint">Measures changes in local smoothness after controlled bit flips. The score is mask asymmetry, not a payload-size estimate.</p><div id="rs-results"><p class="empty">Run analysis to see measurements.</p></div></section></div>
+<section class="card"><h3>Interpretation &amp; limitations</h3><p id="analysis-conclusion">No object analysed yet.</p><ul id="analysis-limitations"><li>Designed for conventional 1-LSB replacement; higher depths are exploratory.</li><li>Thresholds are provisional. False positives and missed payloads are possible.</li></ul><details><summary>Full method settings and measurements</summary><pre id="analysis-data">No report yet.</pre></details></section>
+</section>
+<section class="page" id="page-keys" hidden aria-labelledby="keys-title">
+<div class="workspace-intro"><p class="eyebrow">ALICE'S SIGNING IDENTITY</p><h2 id="keys-title" tabindex="-1">Keep keys identifiable.</h2><p>Private keys stay on this local server. Bob only needs Alice's public key to verify her signature.</p></div>
+<section class="card"><h3>Saved signing pairs</h3><p class="hint">The signing selection on Protect determines which pair is used. Generating or importing adds a pair and preserves earlier pairs.</p><div id="key-list" class="table-wrap"></div><div class="actions"><button class="btn btn-primary" id="generate-key">Generate additional pair</button><button class="btn" id="export-public">Export selected public key</button></div><label class="field">Selected public key<textarea id="selected-public" rows="5" readonly></textarea></label><p class="hint" id="selected-fingerprint"></p></section>
+<form id="key-import-form" class="card"><h3>Import Alice's existing signing pair</h3><label class="field">RSA private key (PEM, at least 2048 bits)<input id="private-file" type="file" accept=".pem" required></label><label class="field">PEM password, if encrypted<input id="key-password" type="password" autocomplete="off"></label><button class="btn btn-block">Import and retain pair</button><p class="hint">For this local assignment demo, imported keys are stored on disk without encryption. Use demo keys only.</p></form>
+</section>
+</main><footer class="footer">P3-6 · Hash, sign, hide, extract, verify. Statistical analysis remains independent.</footer>
+</body></html>

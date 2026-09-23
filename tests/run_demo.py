@@ -9,8 +9,8 @@ marker can run `python tests/run_demo.py` and see every required case:
   negative: tampered payload      -> Tampered
   negative: tampered cover        -> Tampered
   negative: wrong signature/key   -> Signature Invalid
-  negative: wrong start location  -> Wrong Start Location
-  negative: wrong video passphrase -> Wrong Start Location
+  negative: wrong start location  -> Payload Missing (ambiguous extraction failure)
+  negative: wrong video passphrase -> Payload Missing (ambiguous extraction failure)
   negative: oversized payload     -> rejected at encode time (capacity check)
 
 Writes a JSON summary and the stego files it produced to test_evidence/, and
@@ -119,7 +119,7 @@ def main():
             cover_type="video", stego_bytes=enc_v.stego_bytes, num_lsb=2, start_mode="passphrase",
             manual_offset=None, passphrase="WRONG-secret", public_key_pem=None,
         )
-        record("Negative - video, wrong passphrase / start location", "Wrong Start Location", dec_v_wrong.verdict)
+        record("Negative - video, wrong passphrase / start location", "Payload Missing", dec_v_wrong.verdict)
     else:
         print("(skipping video cases - samples/cover_video.mp4 not available, likely no local ffmpeg/codec support)")
 
@@ -191,7 +191,7 @@ def main():
         cover_type="image", stego_bytes=enc.stego_bytes, num_lsb=2, start_mode="passphrase",
         manual_offset=None, passphrase="WRONG-passphrase", public_key_pem=None,
     )
-    record("Negative - wrong passphrase / start location", "Wrong Start Location", dec5.verdict)
+    record("Negative - wrong passphrase / start location", "Payload Missing", dec5.verdict)
 
     # ---------------- Negative: payload larger than capacity ----------------
     huge_payload = b"X" * (10 * 1024 * 1024)  # 10MB into a small PNG - guaranteed to overflow
