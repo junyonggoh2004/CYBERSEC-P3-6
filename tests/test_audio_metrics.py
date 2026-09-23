@@ -7,7 +7,7 @@ maths independently, not just trust the code.
 import numpy as np
 import pytest
 
-import audio_metrics as m
+import backend.stego.audio_metrics as m
 
 
 def test_identical_signals_have_no_distortion():
