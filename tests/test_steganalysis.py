@@ -1,5 +1,7 @@
 """Independent arithmetic oracles, edge cases, API and crypto review tests."""
 import io
+import base64
+import hashlib
 import math
 import sys
 import time
@@ -172,3 +174,43 @@ def test_pipeline_roundtrip_and_analysis_no_mutation(bits, monkeypatch):
         num_lsb=bits, start_mode="manual", manual_offset=24, passphrase=None, public_key_pem=None)
     assert result.verdict == "Authentic"
     assert result.data == b"Kim integration"
+
+
+@pytest.mark.parametrize("kind", ["text", "file"])
+def test_actual_encoder_png_saved_reopened_and_analysed(kind, monkeypatch, tmp_path):
+    """Exercise the real HTTP encoder output, not a synthetic LSB-only fixture."""
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    from cryptography.hazmat.primitives import serialization
+    public_pem = key.public_key().public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+    monkeypatch.setattr(crypto_utils, "load_private_key", lambda: key)
+    monkeypatch.setattr(crypto_utils, "load_public_key", lambda *_: key.public_key())
+    monkeypatch.setattr(crypto_utils, "public_key_pem", lambda: public_pem)
+    rng = np.random.default_rng(20923)
+    cover = png(rng.integers(0, 256, (256, 256, 3), dtype=np.uint8))
+    payload = b"Actual encoder test message. " * 400 if kind == "text" else png(rng.integers(0, 256, (64, 64, 3), dtype=np.uint8))
+    form = {"cover_type": "image", "num_lsb": "1", "start_mode": "manual", "manual_offset": "24",
+            "cover_file": (io.BytesIO(cover), "original.png"), "payload_type": kind}
+    if kind == "text":
+        form["payload_text"] = payload.decode()
+    else:
+        form["payload_file"] = (io.BytesIO(payload), "hidden.png")
+    client = app.test_client()
+    encoded = client.post("/api/encode", data=form)
+    assert encoded.status_code == 200, encoded.json
+    path = tmp_path / encoded.json["stego_filename"]
+    path.write_bytes(base64.b64decode(encoded.json["stego_base64"]))
+    saved = path.read_bytes()
+    reports = []
+    for window in (1024, 65536):
+        response = client.post("/api/analyse", data={"image_file": (io.BytesIO(saved), path.name), "window_size": str(window)})
+        assert response.status_code == 200
+        report = response.json
+        assert report["file_sha256"] == hashlib.sha256(saved).hexdigest()
+        assert "verdict" not in report
+        reports.append(report)
+    assert reports[0]["scores"] == reports[1]["scores"]
+    assert len(reports[0]["channels"]["R"]["windows"]) > len(reports[1]["channels"]["R"]["windows"])
+    decoded = pipeline.decode(cover_type="image", stego_bytes=saved, num_lsb=1,
+        start_mode="manual", manual_offset=24, passphrase=None, public_key_pem=None)
+    assert decoded.verdict == "Authentic"
+    assert decoded.data == payload

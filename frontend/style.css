@@ -279,6 +279,12 @@ details summary { cursor: pointer; font-size: 0.82rem; color: var(--text-dim); }
 
 .footer { text-align: center; padding: 20px; color: var(--text-dim); font-size: 0.75rem; }
 
+.analysis-table-scroll { overflow-x: auto; }
+.analysis-windows { max-height: 340px; overflow-y: auto; }
+.analysis-windows thead { position: sticky; top: 0; background: var(--card); }
+.analysis-hash { overflow-wrap: anywhere; font-family: monospace; }
+#analysis-encoding { padding: 12px; border: 1px solid var(--card-border); border-radius: 8px; }
+
 @media (prefers-color-scheme: light) {
   :root {
     --bg: #f4f6fb; --bg-soft: #eef1f8; --card: #ffffff; --card-border: #dbe1ee;

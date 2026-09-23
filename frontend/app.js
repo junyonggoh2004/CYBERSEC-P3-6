@@ -565,7 +565,14 @@ let lastStego = null; // { bytes, filename, mime }
 
 function renderEncodeResult(data) {
   const bytes = b64ToBytes(data.stego_base64);
-  lastStego = { bytes, filename: data.stego_filename, mime: data.mime };
+  // Snapshot the encoder response, not controls that may change later.
+  lastStego = { bytes, filename: data.stego_filename, mime: data.mime,
+    analysisContext: { num_lsb: data.num_lsb, start_unit: data.start_index,
+      container_bytes: data.container_size_bytes, capacity_bytes: data.capacity_bytes } };
+  const analyseButton = $("#btn-send-to-analysis");
+  analyseButton.dataset.pngOutput = String(data.mime === "image/png");
+  analyseButton.hidden = data.mime !== "image/png";
+  analyseButton.disabled = data.mime !== "image/png" || !!window.StegoAnalysis?.isBusy();
 
   const panel = $("#encode-result");
   panel.hidden = false;
@@ -623,6 +630,12 @@ function renderEncodeResult(data) {
   link.href = blobUrl;
   link.download = data.stego_filename;
 }
+
+$("#btn-send-to-analysis").addEventListener("click", () => {
+  if (!lastStego || lastStego.mime !== "image/png") return;
+  const file = fileFromBytes(lastStego.bytes.slice(), lastStego.filename, lastStego.mime);
+  window.StegoAnalysis.analyseEncoded(file, { ...lastStego.analysisContext });
+});
 
 $("#btn-send-to-decode").addEventListener("click", () => {
   if (!lastStego) return;

@@ -10,6 +10,11 @@ own understanding and the named reviewers' checks before marking tasks Done.
 
 ## Run
 
+The encoder now offers **Analyse this stego PNG**, passing its exact output file
+to the analyser without image conversion. See `STEGANALYSIS_UI_UPDATE.md` for the
+new source/hash display, encoding context and window table. This is a workflow
+and presentation improvement; the mathematical detector and thresholds are unchanged.
+
 From the project root in PowerShell:
 
 ```powershell

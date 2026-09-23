@@ -133,6 +133,7 @@
       </details>
       <div class="actions-row">
         <a id="encode-download-link" class="btn btn-secondary" download>⬇️ Download stego file</a>
+        <button id="btn-send-to-analysis" class="btn btn-secondary" type="button" hidden>Analyse this stego PNG</button>
         <button id="btn-send-to-decode" class="btn btn-secondary" type="button">➡️ Send to Party B (load into Decode)</button>
       </div>
     </div>
@@ -226,7 +227,7 @@
   </section>
 
   <section class="card wide" id="analysis-card">
-    <h2>PNG Steganalysis <span class="hint">Kim's chi-square and RS analysis</span></h2>
+    <h2>PNG Steganalysis <span class="hint">Chi-square and RS analysis</span></h2>
     <p>Look for statistical signs of LSB replacement. This does not authenticate a file or recover its payload.</p>
     <div class="field-grid">
       <label class="field"><span>PNG to analyse (RGB, RGBA, or grayscale)</span>
@@ -238,12 +239,28 @@
       <button type="button" id="btn-analyse" class="btn btn-primary">Analyse PNG</button>
       <button type="button" id="btn-export-analysis" class="btn btn-small" disabled>Export analysis JSON</button>
     </div>
+    <p id="analysis-source">Select a PNG, or use “Analyse this stego PNG” after encoding.</p>
+    <p>Window size affects regional results below. The whole-image score and combined category use the full image.</p>
     <p id="analysis-status" role="status" aria-live="polite"></p>
     <div id="analysis-result" hidden>
+      <h3>Analysed file</h3>
+      <p id="analysis-file-details"></p>
+      <p class="analysis-hash" id="analysis-file-hash"></p>
+      <div id="analysis-encoding" hidden>
+        <h3>Known encoding information</h3>
+        <p id="analysis-encoding-details"></p>
+        <p>These settings came from the encoder response. They are not inferred by steganalysis and do not independently confirm payload recovery. Use Verify to check extraction and signatures.</p>
+      </div>
+      <h3>Blind statistical results — whole image</h3>
       <h3 id="analysis-category"></h3>
       <p id="analysis-scores"></p>
+      <p id="analysis-interpretation"></p>
       <p>Thresholds are provisional. A high score is not a probability that hidden data exists.</p>
-      <table class="log-table"><thead><tr><th>Channel</th><th>Chi-square / df / score</th><th>RS +mask R/S/U</th><th>RS inverse R/S/U</th><th>RS score</th></tr></thead><tbody id="analysis-rows"></tbody></table>
+      <div class="analysis-table-scroll"><table class="log-table"><thead><tr><th>Channel</th><th>Chi-square / df / tail score</th><th>RS +mask R/S/U</th><th>RS inverse R/S/U</th><th>RS score</th></tr></thead><tbody id="analysis-rows"></tbody></table></div>
+      <h3>Chi-square window results</h3>
+      <p id="analysis-window-summary"></p>
+      <p>Windows are consecutive values within each colour plane. Positions are zero-based, with the end excluded. Inspecting many windows can produce chance high scores; window peaks do not change the combined category.</p>
+      <div class="analysis-table-scroll analysis-windows"><table class="log-table"><thead><tr><th>Channel</th><th>Window</th><th>Start–end</th><th>Values</th><th>Statistic / df</th><th>Tail score</th><th>Observation</th></tr></thead><tbody id="analysis-window-rows"></tbody></table></div>
       <ul id="analysis-limitations"></ul>
       <details><summary>Raw statistics, paired histograms, and windows</summary><pre id="analysis-json"></pre></details>
     </div>

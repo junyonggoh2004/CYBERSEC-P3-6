@@ -26,6 +26,12 @@ recorded in `requirements-tested.txt`.
 
 ## Quick start
 
+After encoding a PNG, click **Analyse this stego PNG** to analyse the exact bytes
+offered by the download button. The analysis panel shows the SHA-256, encoder
+settings (separate from blind detection), readable tiny tail scores, and regional
+window results. Changing window size updates the window table, not the whole-image
+score. See [the UI update guide](docs/STEGANALYSIS_UI_UPDATE.md).
+
 ```bash
 python -m venv .venv
 # Windows:
