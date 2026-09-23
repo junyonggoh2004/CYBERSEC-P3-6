@@ -25,6 +25,7 @@
 <nav class="quicknav" aria-label="Jump to section">
   <a href="#encode-card">1️⃣ Protect</a>
   <a href="#decode-card">2️⃣ Verify</a>
+  <a href="#analysis-card">Steganalysis</a>
   <a href="#log-card">📋 Log</a>
 </nav>
 
@@ -224,6 +225,30 @@
     </div>
   </section>
 
+  <section class="card wide" id="analysis-card">
+    <h2>PNG Steganalysis <span class="hint">Kim's chi-square and RS analysis</span></h2>
+    <p>Look for statistical signs of LSB replacement. This does not authenticate a file or recover its payload.</p>
+    <div class="field-grid">
+      <label class="field"><span>PNG to analyse (RGB, RGBA, or grayscale)</span>
+        <input type="file" id="analysis-file" accept="image/png,.png" /></label>
+      <label class="field"><span>Chi-square window size (values per channel)</span>
+        <input type="number" id="analysis-window" min="256" max="1000000" value="65536" /></label>
+    </div>
+    <div class="actions-row">
+      <button type="button" id="btn-analyse" class="btn btn-primary">Analyse PNG</button>
+      <button type="button" id="btn-export-analysis" class="btn btn-small" disabled>Export analysis JSON</button>
+    </div>
+    <p id="analysis-status" role="status" aria-live="polite"></p>
+    <div id="analysis-result" hidden>
+      <h3 id="analysis-category"></h3>
+      <p id="analysis-scores"></p>
+      <p>Thresholds are provisional. A high score is not a probability that hidden data exists.</p>
+      <table class="log-table"><thead><tr><th>Channel</th><th>Chi-square / df / score</th><th>RS +mask R/S/U</th><th>RS inverse R/S/U</th><th>RS score</th></tr></thead><tbody id="analysis-rows"></tbody></table>
+      <ul id="analysis-limitations"></ul>
+      <details><summary>Raw statistics, paired histograms, and windows</summary><pre id="analysis-json"></pre></details>
+    </div>
+  </section>
+
   <!-- ============================= LOG ============================= -->
   <section class="card wide" id="log-card">
     <h2>📋 Verification Log <span class="hint">(evidence trail for the demo)</span></h2>
@@ -254,5 +279,6 @@
 </footer>
 
 <script src="app.js"></script>
+<script src="analysis.js"></script>
 </body>
 </html>

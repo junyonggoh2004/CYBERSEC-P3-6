@@ -20,7 +20,7 @@ from werkzeug.exceptions import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from stego import crypto_utils, jobs, pipeline  # noqa: E402
+from stego import analysis, crypto_utils, jobs, pipeline  # noqa: E402
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
@@ -307,6 +307,29 @@ def api_job_status(job_id):
     result = job.result
     jobs.pop(job_id)
     return jsonify({"status": "done", "result": result})
+
+
+@app.post("/api/analyse")
+def api_analyse():
+    """Independent PNG statistics; never change the verification verdict."""
+    try:
+        upload = request.files.get("image_file")
+        if upload is None:
+            return _bad_request("image_file is required.")
+        data = upload.read(analysis.MAX_FILE_BYTES + 1)
+        window = int(request.form.get("window_size", 65536))
+        if not data or len(data) > analysis.MAX_FILE_BYTES:
+            return _bad_request("Upload a nonempty PNG of at most 32 MiB.")
+        if not 256 <= window <= 1_000_000:
+            return _bad_request("Window size must be 256-1000000 channel values.")
+        mode = request.args.get("mode", "sync")
+        if mode == "async":
+            return jsonify({"job_id": jobs.submit(analysis.analyse_png, data, window)})
+        if mode != "sync":
+            return _bad_request("mode must be 'sync' or 'async'.")
+        return jsonify(analysis.analyse_png(data, window))
+    except ValueError as exc:
+        return _bad_request(str(exc))
 
 
 # --------------------------------------------------------------------------
