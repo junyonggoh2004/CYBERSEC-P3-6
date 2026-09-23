@@ -20,7 +20,7 @@ from werkzeug.exceptions import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from stego import analysis, crypto_utils, jobs, pipeline  # noqa: E402
+from stego import analysis, comparison, crypto_utils, jobs, pipeline  # noqa: E402
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
@@ -307,6 +307,39 @@ def api_job_status(job_id):
     result = job.result
     jobs.pop(job_id)
     return jsonify({"status": "done", "result": result})
+
+
+@app.post("/api/compare/image")
+def api_compare_image():
+    """Direct cover-vs-stego PNG comparison. Unlike /api/analyse, this needs
+    both files and computes exact differences instead of statistically
+    inferring anything - see docs and README for the distinction."""
+    try:
+        cover_file = request.files.get("cover_file")
+        stego_file = request.files.get("stego_file")
+        if cover_file is None or stego_file is None:
+            return _bad_request("Both cover_file and stego_file are required.")
+        return jsonify(comparison.compare_images(cover_file.read(), stego_file.read()))
+    except ValueError as exc:
+        return _bad_request(str(exc))
+    except Exception as exc:
+        return _bad_request(f"Image comparison failed: {exc}", 500)
+
+
+@app.post("/api/compare/audio")
+def api_compare_audio():
+    """Direct cover-vs-stego WAV comparison (waveform overlay/difference + stats)."""
+    try:
+        cover_file = request.files.get("cover_file")
+        stego_file = request.files.get("stego_file")
+        if cover_file is None or stego_file is None:
+            return _bad_request("Both cover_file and stego_file are required.")
+        points = int(request.form.get("waveform_points", comparison.DEFAULT_WAVEFORM_POINTS))
+        return jsonify(comparison.compare_audio(cover_file.read(), stego_file.read(), waveform_points=points))
+    except ValueError as exc:
+        return _bad_request(str(exc))
+    except Exception as exc:
+        return _bad_request(f"Audio comparison failed: {exc}", 500)
 
 
 @app.post("/api/analyse")

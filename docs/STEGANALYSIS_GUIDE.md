@@ -2,8 +2,7 @@
 
 ## Scope and status
 
-Implemented within the existing Flask/browser architecture, not the proposed
-PySide6 layout. Kim's SA-001/002/003 code, SA-004 evaluation, and an SA-005
+Implemented within the existing Flask/browser architecture. Kim's SA-001/002/003 code, SA-004 evaluation, and an SA-005
 integration are ready for team review. No teammate review is claimed. Optional
 WAV statistics (SA-006) are deferred. This is AI-assisted code requiring Kim's
 own understanding and the named reviewers' checks before marking tasks Done.

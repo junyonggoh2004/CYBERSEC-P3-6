@@ -552,6 +552,9 @@ $("#btn-encode").addEventListener("click", async () => {
       true,
       `LSBs=${data.num_lsb}, start=${data.start_index}, container=${data.container_size_bytes}B, capacity=${data.capacity_bytes}B`
     );
+    // Compare (defined in compare.js) runs cover-vs-stego automatically so
+    // the difference views are already waiting below, without an extra click.
+    sendCoverAndStegoToCompare({ auto: true });
   } catch (e) {
     addLog("Encode", state.encode.coverType, "FAILED", false, e.message);
     alert(`Encoding failed: ${e.message}`);

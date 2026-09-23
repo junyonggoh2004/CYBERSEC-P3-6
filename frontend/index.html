@@ -25,6 +25,7 @@
 <nav class="quicknav" aria-label="Jump to section">
   <a href="#encode-card">1️⃣ Protect</a>
   <a href="#decode-card">2️⃣ Verify</a>
+  <a href="#compare-card">🔍 Compare</a>
   <a href="#analysis-card">Steganalysis</a>
   <a href="#log-card">📋 Log</a>
 </nav>
@@ -134,6 +135,7 @@
       <div class="actions-row">
         <a id="encode-download-link" class="btn btn-secondary" download>⬇️ Download stego file</a>
         <button id="btn-send-to-decode" class="btn btn-secondary" type="button">➡️ Send to Party B (load into Decode)</button>
+        <button id="btn-send-to-compare" class="btn btn-secondary" type="button">🔍 Send cover + stego to Compare</button>
       </div>
     </div>
   </section>
@@ -225,6 +227,141 @@
     </div>
   </section>
 
+  <!-- ============================= COMPARE ============================= -->
+  <section class="card wide" id="compare-card">
+    <h2>🔍 Cover vs Stego Comparison</h2>
+    <p>
+      Compare an original cover file against its resulting stego file to see exactly what LSB embedding
+      changed - both how similar they look or sound, and the exact values that differ. See
+      <a href="#compare-explainer">Comparison vs Steganalysis</a> below for how this differs from the
+      statistical Steganalysis section.
+    </p>
+
+    <p class="section-label">📁 Files to compare</p>
+    <div class="tabbar" data-group="compare-type">
+      <button class="tab active" data-value="image" type="button">🖼️ PNG image</button>
+      <button class="tab" data-value="audio" type="button">🎵 WAV audio</button>
+    </div>
+
+    <div class="field-grid">
+      <div>
+        <p class="dz-hint">Original cover object</p>
+        <div class="dropzone dropzone-compact" id="compare-cover-drop">
+          <input type="file" id="compare-cover-input" hidden accept=".png,.wav" />
+          <div class="dz-placeholder">
+            <span class="dz-icon">⬇️</span>
+            <p>Drop the original cover file, or click to browse</p>
+          </div>
+          <div class="dz-preview" id="compare-cover-preview" hidden></div>
+        </div>
+      </div>
+      <div>
+        <p class="dz-hint">Stego object</p>
+        <div class="dropzone dropzone-compact" id="compare-stego-drop">
+          <input type="file" id="compare-stego-input" hidden accept=".png,.wav" />
+          <div class="dz-placeholder">
+            <span class="dz-icon">⬇️</span>
+            <p>Drop the stego file, or click to browse</p>
+          </div>
+          <div class="dz-preview" id="compare-stego-preview" hidden></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions-row">
+      <button type="button" id="btn-compare" class="btn btn-primary" disabled>Compare cover vs stego</button>
+    </div>
+    <p id="compare-status" role="status" aria-live="polite"></p>
+
+    <div id="compare-result" hidden>
+      <!-- ---- PNG comparison views ---- -->
+      <div id="compare-image-view">
+        <div class="tabbar" data-group="compare-image-mode">
+          <button class="tab active" data-value="overlay" type="button">Overlay</button>
+          <button class="tab" data-value="mask" type="button">Change Mask</button>
+          <button class="tab" data-value="amplified" type="button">Amplified Difference</button>
+        </div>
+
+        <div id="compare-overlay-panel" class="compare-panel">
+          <p>
+            Cover shown at 100% opacity with the stego image layered on top. Use the slider to fade
+            between them - at realistic LSB depths (1-2 bits) the two usually look identical at any
+            position, even though changes are present.
+          </p>
+          <div class="compare-media-scroll">
+            <div class="compare-overlay">
+              <img id="compare-overlay-cover" alt="Original cover" />
+              <img id="compare-overlay-stego" alt="Stego object" style="opacity: 0.5" />
+            </div>
+          </div>
+          <label class="field">
+            <span>Stego layer opacity: <output id="compare-opacity-out">50%</output></span>
+            <input type="range" id="compare-opacity-slider" min="0" max="100" value="50" />
+          </label>
+        </div>
+
+        <div id="compare-mask-panel" class="compare-panel" hidden>
+          <p>
+            Bright locations in the change mask indicate pixels whose values differ between the original
+            and stego images. A carrier value that already matched the bit being written stays unchanged,
+            so it is not highlighted here.
+          </p>
+          <div class="compare-media-scroll"><img id="compare-mask-img" class="compare-full-img" alt="Change mask" /></div>
+        </div>
+
+        <div id="compare-amp-panel" class="compare-panel" hidden>
+          <p>
+            |stego - cover| per RGB channel, scaled so the largest difference reaches full intensity
+            (<span id="compare-amp-factor"></span>) and overlaid in magenta on top of the cover image, so
+            you can see exactly where the change happened. Unchanged pixels show the plain cover.
+          </p>
+          <div class="compare-media-scroll"><img id="compare-amp-img" class="compare-full-img" alt="Amplified difference overlaid on the cover image" /></div>
+          <details>
+            <summary>Show the raw difference-only image (no cover, black background) instead</summary>
+            <div class="compare-media-scroll"><img id="compare-amp-raw-img" class="compare-full-img" alt="Amplified difference, no cover background" /></div>
+          </details>
+        </div>
+      </div>
+
+      <!-- ---- WAV comparison views ---- -->
+      <div id="compare-audio-view" hidden>
+        <p class="section-label">▶️ Playback</p>
+        <div class="field-grid">
+          <label class="field"><span>Original Cover</span><audio id="compare-audio-cover-player" controls></audio></label>
+          <label class="field"><span>Stego Object</span><audio id="compare-audio-stego-player" controls></audio></label>
+        </div>
+        <p>Small LSB modifications are normally inaudible.</p>
+
+        <p class="section-label">〰️ Waveform Overlay</p>
+        <p>Cover and stego waveforms drawn together; at normal scale, small LSB differences may be nearly invisible.</p>
+        <canvas id="compare-waveform-canvas" width="1000" height="180"></canvas>
+
+        <p class="section-label">〰️ Difference Waveform</p>
+        <p>
+          The stego sample value minus the original sample value, visually magnified (auto-scaled to the
+          largest observed difference) so small LSB changes can be seen. Statistics below are always
+          computed from the full, un-magnified data.
+        </p>
+        <canvas id="compare-diff-canvas" width="1000" height="140"></canvas>
+      </div>
+
+      <p class="section-label">📊 Comparison statistics</p>
+      <div class="kv-list" id="compare-stats-kv"></div>
+      <details><summary>Raw comparison JSON</summary><pre id="compare-json"></pre></details>
+    </div>
+
+    <details id="compare-explainer">
+      <summary>Comparison vs Steganalysis - what's the difference?</summary>
+      <p><strong>Comparison</strong> (this section) requires both the known cover and stego object and calculates
+      exact differences - every changed value is known with certainty because both files are available.</p>
+      <p><strong>Steganalysis</strong> (below) may only have a suspected object; it attempts to infer the presence
+      of hidden data statistically, without ever seeing the original cover.</p>
+      <p>An embedding location is also not necessarily a changed location: if the existing bit already matched the
+      bit being written, LSB replacement leaves that value untouched, so "positions written to" and "positions
+      changed" are not the same set.</p>
+    </details>
+  </section>
+
   <section class="card wide" id="analysis-card">
     <h2>PNG Steganalysis <span class="hint">Kim's chi-square and RS analysis</span></h2>
     <p>Look for statistical signs of LSB replacement. This does not authenticate a file or recover its payload.</p>
@@ -279,6 +416,7 @@
 </footer>
 
 <script src="app.js"></script>
+<script src="compare.js"></script>
 <script src="analysis.js"></script>
 </body>
 </html>

@@ -7,3 +7,4 @@ test_evidence/
 samples/*
 !samples/steganalysis/
 .pytest_cache/
+backend/keys/public_key.pem

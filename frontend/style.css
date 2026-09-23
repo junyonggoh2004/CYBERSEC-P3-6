@@ -274,6 +274,28 @@ details summary { cursor: pointer; font-size: 0.82rem; color: var(--text-dim); }
 .log-badge.ok { background: rgba(56, 193, 114, 0.18); color: var(--good); }
 .log-badge.bad { background: rgba(239, 90, 111, 0.18); color: var(--danger); }
 
+.compare-panel { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.compare-panel p { font-size: 0.95rem; }
+/* Fixed pixel size (not %/vw) so Overlay, Change Mask, and Amplified
+   Difference all render at exactly the same size regardless of viewport
+   width - resizing the window must not make a real difference look bigger
+   or smaller between views. A horizontal scrollbar on very narrow screens
+   is an accepted trade-off for keeping the size genuinely fixed. */
+.compare-media-scroll { overflow-x: auto; }
+.compare-overlay { position: relative; width: 480px; border-radius: 8px; overflow: hidden; border: 1px solid var(--card-border); }
+.compare-overlay img { display: block; width: 100%; height: auto; }
+.compare-overlay img#compare-overlay-stego { position: absolute; inset: 0; }
+.compare-full-img { width: 480px; height: auto; border-radius: 8px; border: 1px solid var(--card-border); background: #000; }
+#compare-waveform-canvas, #compare-diff-canvas {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  background: var(--bg-soft);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+}
+.field audio { width: 100%; }
+
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 50; }
 .modal-box { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius); padding: 20px; max-width: 600px; width: 90%; }
 

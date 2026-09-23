@@ -19,6 +19,12 @@ Run Kim's tests with `python -m pip install -r requirements-dev.txt` followed by
 `python scripts/evaluate_steganalysis.py`. Exact tested dependency versions are
 recorded in `requirements-tested.txt`.
 
+- **Cover vs Stego Comparison**: runs automatically right after every PNG/WAV encode — no extra click
+  needed — and drops you straight into the amplified-difference view (magenta highlights overlaid on the
+  actual cover image showing exactly what changed), alongside change mask, overlay, waveform overlay,
+  difference waveform, playback, and exact numeric statistics. Scroll to the **Compare** section to see it,
+  or click "Send cover + stego to Compare" to re-run it on demand (e.g. after using a negative-case tool).
+  See [Cover vs Stego Comparison](#cover-vs-stego-comparison) below for how this differs from steganalysis.
 - **Embed (encode)**: drop a cover file — PNG image, 16/32-bit PCM WAV, or a video file (MP4/MKV/MOV/AVI/WebM) with an audio track — pick a payload (typed text, any file, or an audio/MP3 file), pick how many LSBs to use (1–8) and where to start embedding, and produce a signed stego file.
 - **Extract (decode)**: drop a received stego file, supply the same LSB depth / start-location secret and a public key, and get back a clear verdict: **Authentic, Tampered, Signature Invalid, Payload Missing, Wrong Start Location,** or **Cannot Verify** — plus the recovered payload.
 - **One drop zone, any file**: you don't pick "image" or "audio" or "video" first — drop (or click-to-browse) any supported cover/stego file into the single drop zone and the app detects the type from the file itself and switches to the matching tab automatically. The tabs still work for manually forcing a type if you want to.
@@ -105,6 +111,91 @@ The video stream is always stream-copied (`-c:v copy`, never re-encoded), so pic
 - Because standard containers like MP4 don't support raw PCM audio, the stego output is always produced as a **Matroska (.mkv)** file (playable in VLC and most modern players/browsers, though not universally — e.g. not natively in Safari).
 - The remux deliberately does **not** use ffmpeg's `-shortest` flag: encoders like AAC pad/prime the audio stream by a handful of samples relative to the video's nominal duration, and trimming to the shorter stream risks silently cutting off part of the embedded container. The full audio track (with payload) is always preserved, at the cost of a sub-frame, inaudible audio/video duration mismatch in rare cases.
 
+## Cover vs Stego Comparison
+
+Once a stego file exists alongside its original cover, both sides of the "before/after" picture are
+available — so instead of guessing, the app can show the *exact* effect of embedding, both perceptually
+(does it look/sound different?) and numerically (which values actually changed?). This runs **automatically
+right after every PNG/WAV encode** — the Compare section fills in and the comparison runs on its own,
+defaulting straight to the amplified-difference view, so you never need an extra click just to see it.
+Scroll down to **Compare** to look at the result, or drop in a different pair of files (or click "Send cover
++ stego to Compare" again, e.g. after using a negative-case tampering tool) to re-run it on demand.
+
+**Why cover and stego objects normally look/sound almost identical**: LSB replacement only ever touches
+the lowest `num_lsb` bits of each carrier byte/sample. At 1–2 bits on an 8-bit colour channel or a 16-bit
+audio sample, the largest possible change is tiny relative to the value's full range — usually far below
+what the eye or ear can distinguish, especially spread across a whole image or several seconds of audio.
+**This is also why the default 50% overlay alone will usually not visibly reveal 1-LSB changes** — a
+one-part-in-256 (or one-part-in-65536, for audio) difference disappears into normal image/audio texture at
+that opacity. The overlay is meant to *demonstrate* that near-imperceptibility, not to serve as a detection
+method by itself; the change mask and amplified/magnified views exist specifically because the overlay
+usually can't show the difference on its own.
+
+### PNG comparison
+
+- **Overlay** — the original cover image is shown at 100% opacity with the stego image layered directly
+  on top; an opacity slider fades the top (stego) layer from 0–100% while the two stay pixel-for-pixel
+  aligned (both images are validated to have identical dimensions before comparison). Moving the slider
+  across a typical 1–2 LSB stego file will rarely show a visible change — see above.
+- **Change Mask** — for every pixel, the app compares the actual decoded R/G/B channel values (not "which
+  positions embedding wrote to") and renders a black/white mask: white where at least one of R/G/B differs,
+  black where none do. This matters because **an embedding position is not necessarily a changed position**:
+  if a carrier byte's low bits already equalled the bits being written, LSB replacement leaves that byte
+  numerically unchanged even though it was "written to". The mask only ever reflects real, provable
+  differences between the two files.
+- **Amplified Difference** — computes `|stego_channel − cover_channel|` per R/G/B channel, scales the result
+  so the single largest observed difference maps to full intensity (the scale factor used is shown next to
+  the image, e.g. "×85 amplified"), and blends it as a bright magenta highlight directly on top of the
+  original cover image — so changed spots are shown *in context*, on the actual picture, rather than as an
+  abstract diff-only image on a black background. Pixels with zero difference render as the plain,
+  unmodified cover. The scaling/highlighting only affects this one visualisation and never modifies the
+  source images or any stored file; the plain diff-only (no cover) rendering is still available via a
+  collapsed "show raw difference" toggle underneath it.
+
+### WAV comparison
+
+- **Playback** — the original cover and stego audio are both loaded into labelled players so you can
+  listen for yourself; at realistic LSB depths they should sound the same.
+- **Waveform Overlay** — draws the cover and stego sample values on the same graph in different colours.
+  At normal scale, a 1-LSB difference is usually far too small to see against the waveform's overall shape
+  — again, that's expected, not a sign the comparison failed.
+- **Difference Waveform** — computed sample-by-sample as `difference[n] = stego[n] − cover[n]` and drawn on
+  its own auto-scaled graph (the caption states the full-scale value it was magnified to) so small LSB-scale
+  differences are visible. This view is explicitly labelled as visually magnified; the statistics below it
+  are always computed from the real, un-magnified sample values.
+
+For stereo/multichannel WAV files, samples are compared per channel (channel 0 with channel 0, channel 1
+with channel 1, …); the displayed waveform graphs show channel 0, and the statistics table lists every
+channel's own changed-sample count, maximum/mean difference, and RMS difference.
+
+### What the statistics mean
+
+PNG: image dimensions; total RGB channels compared and how many changed (as a count and a percentage);
+changed pixels (a pixel counts as changed if at least one of its R/G/B channels differs) and the percentage
+of pixels changed; the maximum and mean absolute per-channel difference; and separate changed-channel counts
+for Red, Green, and Blue. If the cover has an alpha channel, note that this project's PNG encoder also
+embeds into alpha for RGBA covers (see `backend/stego/image_lsb.py`) — alpha's own changed-channel count and
+difference are reported alongside the RGB statistics but are **not** included in the RGB totals or in the
+change-mask/amplified-difference images, which only ever compare R/G/B.
+
+WAV: sample rate, sample width/bit depth, channel count, and frame count; total samples compared; changed
+samples and the percentage changed; the maximum and mean absolute sample difference; and the RMS (root mean
+square) difference, a single number summarising the overall size of the change across every sample.
+
+### Comparison vs Steganalysis
+
+These two features answer different questions and should not be confused:
+
+- **Comparison** (this section) requires **both** the known cover and the stego object. Because both files
+  are available, every difference can be calculated exactly — there is no guessing involved.
+- **Steganalysis** (the next section) may only have a single suspected file, with no known original to
+  compare against. It attempts to statistically *infer* whether hidden data is likely present, and its
+  output is a probabilistic indication, not a certain answer — see the Steganalysis section and
+  [docs/STEGANALYSIS_GUIDE.md](docs/STEGANALYSIS_GUIDE.md) for the methods and their limitations.
+
+Neither feature affects the cryptographic verdict from Encode/Decode — Comparison and Steganalysis are both
+independent, informational views of the media itself.
+
 ## Innovation (FR13, Learning Outcome 7)
 
 Beyond the baseline fixed-location/single-LSB demo, this implementation adds:
@@ -141,11 +232,16 @@ backend/
     video_lsb.py              video <-> audio-track demux/remux via bundled ffmpeg
     pipeline.py                 ties the above into encode()/decode()/capacity_check()
     jobs.py                       background job registry for async decode
+    comparison.py                  cover-vs-stego direct comparison (PNG + WAV) - see /api/compare/*
+    analysis.py                     PNG steganalysis (chi-square + RS) - see /api/analyse
   keys/                    generated RSA key pair (private key git-ignored)
 frontend/
   index.html / style.css / app.js    single-page drag-and-drop GUI (auto-detects cover type)
+  compare.js                          Cover vs Stego Comparison UI (overlay/change-mask/waveforms)
+  analysis.js                          Steganalysis UI
 scripts/make_samples.py    generates sample PNG/WAV/MP4 cover files
 tests/run_demo.py          scripted positive/negative test-case runner
+tests/test_comparison.py   Cover vs Stego Comparison unit + API tests
 docs/                       declaration-of-originality / contribution-statement templates
 samples/                    generated sample cover files (git-ignored content, folder kept)
 test_evidence/              output of tests/run_demo.py (screenshots from the live demo go here too)

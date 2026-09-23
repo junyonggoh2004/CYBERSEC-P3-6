@@ -55,16 +55,16 @@ Not started -> In progress -> In review -> Verified -> Done
 | Area | Initial choice | Reason |
 |---|---|---|
 | Language | Python 3.12 or team-agreed supported Python 3 version | Good library support and rapid testing |
-| GUI | PySide6 | Native Windows desktop interface with image, audio, and worker support |
+| GUI | Flask backend + vanilla HTML/CSS/JS | Single-page, drag-and-drop browser interface served by the Flask app |
 | Images | Pillow | Reliable decoded PNG pixel access |
 | Numeric processing | NumPy | Efficient carrier and steganalysis calculations |
-| Cryptography | `cryptography` | Established Ed25519, AES-GCM, KDF, and PEM support |
+| Cryptography | `cryptography` | Established RSA, hashing, and PEM support |
 | Audio format | Standard `wave` module plus NumPy | PCM WAV access without lossy conversion |
-| Audio playback | Qt Multimedia through PySide6 | Fits the selected GUI stack |
+| Audio playback | Native HTML5 `<audio>` element | Fits the browser-based GUI stack, no extra dependency |
 | Statistics | SciPy if needed; otherwise reviewed local formulas | Chi-square probability calculations and evaluation |
 | Tests | pytest, pytest-cov | Parameterised and integration testing |
 | Formatting/linting | Ruff | Fast consistent checks |
-| Packaging | `pyproject.toml`, virtual environment, optional PyInstaller late | Reproducible setup first, executable only after stability |
+| Packaging | `requirements.txt`, virtual environment | Reproducible `pip install` + `python backend/app.py` setup |
 
 Versions shall be pinned before the first release candidate. A dependency shall not be added when the standard library or an existing dependency safely covers the requirement.
 
@@ -103,18 +103,16 @@ CYBERSEC-P3-6/
 │       │   ├── chi_square.py
 │       │   ├── rs_analysis.py
 │       │   └── combined.py
-│       ├── services/
-│       │   ├── protect.py
-│       │   ├── verify.py
-│       │   ├── analyse.py
-│       │   └── reports.py
-│       └── gui/
-│           ├── main_window.py
-│           ├── protect_view.py
-│           ├── verify_view.py
-│           ├── analysis_view.py
-│           ├── keys_view.py
-│           └── workers.py
+│       └── services/
+│           ├── protect.py
+│           ├── verify.py
+│           ├── analyse.py
+│           └── reports.py
+├── frontend/
+│   ├── index.html
+│   ├── style.css
+│   ├── app.js
+│   └── analysis.js
 ├── tests/
 │   ├── unit/
 │   ├── integration/
@@ -151,7 +149,7 @@ No preferences were provided, so this allocation balances the major assessed are
 | Jun Yong | Architecture, payload/framing, stable hashing, integration coordination | GUI/verdict integration | Security design and end-to-end architecture |
 | Gabriel | PNG carrier, image capacity, image comparison metrics | WAV carrier review | Image encode/decode and image cases |
 | Jian Xuan | WAV carrier, audio capacity, playback integration support | PNG carrier review | Audio encode/decode and audio cases |
-| Matthias | PySide6 shell, Protect/Verify workflow integration, accessibility | Payload and reports review | GUI workflow and Party A-to-B handoff |
+| Matthias | Flask/web shell, Protect/Verify workflow integration, accessibility | Payload and reports review | GUI workflow and Party A-to-B handoff |
 | Kim | Chi-square, RS analysis, evaluation dataset and interpretation | Cryptographic test review | Innovation and limitations |
 | Gerome | Verdict engine, automated integration tests, evidence/release coordination | Steganalysis result review | Negative cases, reproducibility, ethics |
 
@@ -253,7 +251,7 @@ Work:
 - Add `pyproject.toml`, runtime dependencies, development dependencies, and commands.
 - Configure Ruff and pytest.
 - Add `.gitignore` entries for virtual environments, caches, generated evidence, and real private keys as appropriate.
-- Provide an application entry point that can open an empty PySide6 window.
+- Provide an application entry point that can start a bare Flask server and serve an empty page.
 
 Acceptance:
 
@@ -696,7 +694,7 @@ Acceptance:
 
 ### Phase F — GUI
 
-#### `GUI-001` — Build navigable PySide6 application shell
+#### `GUI-001` — Build navigable Flask + browser application shell
 
 - Owner: Matthias
 - Reviewer: Jun Yong
@@ -706,8 +704,8 @@ Acceptance:
 
 Acceptance:
 
-- Protect, Verify, Steganalysis, and Keys/Settings views are reachable.
-- Status area, error presentation, and file dialogs behave consistently.
+- Protect, Verify, Steganalysis, and Keys/Settings sections are reachable on the single page.
+- Status area, error presentation, and drag-and-drop file zones behave consistently.
 - Keyboard navigation follows a sensible order.
 
 #### `GUI-002` — Implement Protect view
@@ -1294,7 +1292,7 @@ When an answer arrives:
 | Date | Decision | Reason | Revisit condition |
 |---|---|---|---|
 | 15 Sep 2026 | Use two documents: specification and implementation plan | Separates stable behaviour from changing tasks/status | Only if submission format demands consolidation |
-| 15 Sep 2026 | Use Python and PySide6 on Windows | Team choice and suitable media/GUI ecosystem | Compatibility issue on demo machine |
+| 15 Sep 2026 | Use Python with a Flask backend and a vanilla HTML/CSS/JS single-page frontend | Team choice; a browser-based GUI needs no desktop framework and demos on any machine with a browser | Requirement for an installable desktop application |
 | 15 Sep 2026 | Prioritise complete mandatory workflows before enhancements | PNG and WAV carry most marks and optional work must not displace them | Mandatory acceptance achieved |
 | 15 Sep 2026 | Use SHA-256, Ed25519, and AES-256-GCM | Established, explainable primitives with library support | Lecturer specifies alternatives |
 | 15 Sep 2026 | Provide manual and automatic start modes | Meets teaching/demo needs and security-design requirement | Lecturer narrows requirement |

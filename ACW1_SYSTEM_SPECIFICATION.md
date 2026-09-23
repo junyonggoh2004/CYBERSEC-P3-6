@@ -7,9 +7,9 @@
 | Team | P3-6 |
 | Members | Jun Yong, Gabriel, Jian Xuan, Matthias, Kim, Gerome |
 | Document purpose | Define what the system must do, how it behaves, and how assignment compliance will be demonstrated |
-| Target platform | Windows |
+| Target platform | Cross-platform (Flask server + web browser); developed and demoed on Windows |
 | Implementation language | Python 3 |
-| GUI framework | PySide6 |
+| GUI framework | Flask backend + vanilla HTML/CSS/JS single-page web frontend |
 | Submission date | 30 September 2026 |
 | Demonstration date | 1 October 2026 |
 | Status | Initial implementation baseline |
@@ -29,7 +29,7 @@ Requirement words have the following meanings:
 
 ## 2. Project overview
 
-The system is a Windows desktop application that hides a security-verification package inside an image or audio cover object using LSB replacement. Party A protects a media file by creating a payload, hashing a stable representation of the media, digitally signing the payload, optionally encrypting it, and embedding the result. Party B receives the stego media, extracts the package, validates the signature and media hash, and receives a clear verdict with supporting reasons.
+The system is a Flask-backed, single-page web application that hides a security-verification package inside an image or audio cover object using LSB replacement. Party A protects a media file by creating a payload, hashing a stable representation of the media, digitally signing the payload, optionally encrypting it, and embedding the result. Party B receives the stego media, extracts the package, validates the signature and media hash, and receives a clear verdict with supporting reasons.
 
 The mandatory cover objects are:
 
@@ -129,8 +129,8 @@ The evaluator may provide an unknown payload during the demonstration. Its exact
 | Topic | Decision |
 |---|---|
 | Language | Python 3 |
-| GUI | PySide6 desktop GUI |
-| Platform | Windows |
+| GUI | Flask backend + vanilla HTML/CSS/JS single-page web frontend |
+| Platform | Cross-platform (browser-based); developed and demoed on Windows |
 | Image baseline | Lossless PNG, RGB and RGBA |
 | Audio baseline | Uncompressed 16-bit PCM WAV, mono and stereo |
 | Hash | SHA-256 |
@@ -426,7 +426,7 @@ Verdict precedence is defined in Section 15.
 ## 10. Proposed architecture
 
 ```text
-PySide6 GUI
+Web GUI (Flask backend + browser frontend)
 ├── Protect workflow controller
 ├── Verify workflow controller
 └── Steganalysis controller
