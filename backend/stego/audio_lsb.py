@@ -1,12 +1,10 @@
 """
 Audio cover-object support (WAV/PCM, FR2/FR5/FR6/FR8).
 
-Supports 16-bit and 32-bit PCM WAV specifically (the "16bit and 32bit"
-requirement): the sample width is auto-detected from the WAV header (never
-hard-coded), each PCM sample becomes one carrier unit (int16 or int32), and
-LSB embedding/extraction reuses the exact same bitstream.py primitives as
-images. 8-bit PCM (unsigned) and other widths (e.g. 24-bit, float) are
-rejected with a clear error rather than silently corrupting the file.
+Supports 16-, 24- and 32-bit PCM WAV. The header determines sample width;
+packed 24-bit values are sign-extended to int32 in memory and written back
+as three bytes per sample. Each sample remains one carrier unit. Other
+input encodings are converted by media_input before embedding.
 """
 from __future__ import annotations
 
@@ -19,6 +17,7 @@ import numpy as np
 _DTYPE_BY_SAMPWIDTH = {
     1: np.uint8,   # 8-bit PCM is unsigned in WAV
     2: np.int16,   # 16-bit PCM
+    3: np.int32,   # Packed 24-bit PCM is expanded to signed int32 in memory
     4: np.int32,   # 32-bit PCM
 }
 
@@ -27,7 +26,7 @@ _DTYPE_BY_SAMPWIDTH = {
 class AudioCarrier:
     array: np.ndarray  # 1-D, dtype depends on sample width, mutable
     nchannels: int
-    sampwidth: int  # bytes per sample: 1, 2 or 4
+    sampwidth: int  # bytes per sample: 2, 3 or 4
     framerate: int
     nframes: int
 
@@ -51,8 +50,15 @@ def load_audio_carrier(file_bytes: bytes) -> AudioCarrier:
             "Please use 16-bit or 32-bit PCM WAV."
         )
 
-    dtype = _DTYPE_BY_SAMPWIDTH[sampwidth]
-    arr = np.frombuffer(raw, dtype=dtype).copy()
+    if len(raw) != nframes * nchannels * sampwidth:
+        raise ValueError("WAV audio data is truncated. Choose a complete audio file.")
+    if sampwidth == 3:
+        packed = np.frombuffer(raw, dtype=np.uint8).reshape(-1, 3).astype(np.int32)
+        values = packed[:, 0] | (packed[:, 1] << 8) | (packed[:, 2] << 16)
+        arr = (values ^ 0x800000) - 0x800000
+    else:
+        dtype = np.dtype(_DTYPE_BY_SAMPWIDTH[sampwidth]).newbyteorder("<")
+        arr = np.frombuffer(raw, dtype=dtype).copy()
     return AudioCarrier(
         array=arr,
         nchannels=nchannels,
@@ -68,7 +74,11 @@ def carrier_to_wav_bytes(carrier: AudioCarrier) -> bytes:
         wf.setnchannels(carrier.nchannels)
         wf.setsampwidth(carrier.sampwidth)
         wf.setframerate(carrier.framerate)
-        wf.writeframes(carrier.array.tobytes())
+        if carrier.sampwidth == 3:
+            packed = np.column_stack([(carrier.array >> shift) & 255 for shift in (0, 8, 16)])
+            wf.writeframes(packed.astype(np.uint8).tobytes())
+        else:
+            wf.writeframes(carrier.array.astype(carrier.array.dtype.newbyteorder("<")).tobytes())
     return buf.getvalue()
 
 

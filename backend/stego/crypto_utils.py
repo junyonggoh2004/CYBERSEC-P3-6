@@ -65,9 +65,6 @@ def generate_keypair(overwrite: bool = False) -> tuple[Path, Path]:
     if not overwrite and PRIVATE_KEY_PATH.exists() and PUBLIC_KEY_PATH.exists():
         return PRIVATE_KEY_PATH, PUBLIC_KEY_PATH
 
-    # Legacy callers may request rotation. Archive the existing pair first.
-    if PRIVATE_KEY_PATH.exists():
-        save_keypair(load_private_key())
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     private_bytes = private_key.private_bytes(
         encoding=serialization.Encoding.PEM,
@@ -149,14 +146,12 @@ def key_description(key, key_id=None):
 def save_keypair(key):
     if not isinstance(key, rsa.RSAPrivateKey) or key.key_size < 2048:
         raise ValueError("Import an RSA private key of at least 2048 bits.")
-    key_id = fingerprint(key)
-    directory = KEY_DIR / "saved"
-    directory.mkdir(parents=True, exist_ok=True)
-    destination = directory / (key_id + ".pem")
-    if not destination.exists():
-        destination.write_bytes(key.private_bytes(serialization.Encoding.PEM,
-            serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
-    return key_description(key)
+    ensure_key_dir()
+    PRIVATE_KEY_PATH.write_bytes(private_pem(key))
+    PUBLIC_KEY_PATH.write_bytes(key_description(key)["public_key_pem"].encode())
+    for path in (KEY_DIR / "saved").glob("*.pem"):
+        path.unlink()
+    return key_description(key, "legacy")
 
 
 def signing_key(key_id=None):
@@ -181,3 +176,24 @@ def list_signing_keys():
 
 def new_signing_key():
     return save_keypair(rsa.generate_private_key(public_exponent=65537, key_size=2048))
+
+
+def private_pem(key):
+    return key.private_bytes(serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+
+
+def recipient_key():
+    path = KEY_DIR / "bob_private.pem"
+    if not path.exists():
+        replace_recipient_key()
+    return serialization.load_pem_private_key(path.read_bytes(), password=None)
+
+
+def replace_recipient_key(key=None):
+    key = key or rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    if not isinstance(key, rsa.RSAPrivateKey) or key.key_size < 2048:
+        raise ValueError("Import an RSA private key of at least 2048 bits.")
+    ensure_key_dir()
+    (KEY_DIR / "bob_private.pem").write_bytes(private_pem(key))
+    return key_description(key)
