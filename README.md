@@ -19,7 +19,7 @@ demo, not a public multi-user key-management service.
 
 ## Pages and user journey
 
-1. **Protect — Alice:** select the original PNG or WAV, choose hidden content,
+1. **Protect — Alice:** select or drag in the original PNG, WAV or video, choose hidden content,
    select SHA-256 (default) or SHA-512, select Alice's signing pair, choose 1–8
    lowest bits and a manual or passphrase-derived start location.
 2. Review exact capacity and the draft verification record. The app includes
@@ -37,6 +37,8 @@ demo, not a public multi-user key-management service.
    pairs do not claim to know the hidden content.
 6. **Steganalysis:** independent PNG chi-square and RS containers, per-channel
    measurements, provisional thresholds, explanations and JSON export.
+   WAV files and video audio tracks use sample-pair analysis instead (estimated
+   share of samples carrying hidden bits, 95% interval and a time map).
    Histograms stay on Compare.
 7. **Alice's keys:** view fingerprints/public keys, export public keys, import
    demo RSA private keys, and generate additional pairs without replacing old ones.
@@ -49,15 +51,15 @@ invalidates the displayed result.
 
 | Cover | Hidden content | Output |
 |---|---|---|
-| PNG | Text | PNG |
-| PNG | Audio file | PNG |
-| WAV/PCM | Text | WAV |
-| WAV/PCM | Image file | WAV |
+| PNG | Text, or a text/image/audio/video file | PNG |
+| WAV/PCM | Text, or a text/image/audio/video file | WAV |
+| Video with an audio track (MP4/MKV/MOV/WebM/AVI) | Text, or a text/image/audio/video file | MKV |
 
 Audio covers support signed 16-bit and 32-bit PCM. Payload files are carried as
-bytes, so an MP3 payload can be hidden in PNG although MP3 is not a supported
-cover. Legacy video functions remain in the backend library but are not exposed
-in this first-draft workflow.
+bytes, so any supported content file (TXT, PNG/JPEG, WAV/MP3, MP4/MKV, ...) can
+be hidden in any cover that has the capacity. Video covers embed into the video's
+audio track; the video stream is copied untouched and the output is MKV so the
+PCM audio survives. Covers and content files can be dragged onto the drop zones.
 
 ## What is signed and hashed
 
@@ -148,7 +150,7 @@ For the detector mathematics and existing evaluation, see
 
 ```powershell
 python -m pip install -r requirements-dev.txt
-python -m pytest tests/test_steganalysis.py tests/test_workflow.py -q
+python -m pytest tests/test_steganalysis.py tests/test_audio_steganalysis.py tests/test_workflow.py -q
 ```
 
 The tests isolate keys in temporary directories. They cover both hashes at all

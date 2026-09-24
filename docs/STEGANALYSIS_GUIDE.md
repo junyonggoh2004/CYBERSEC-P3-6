@@ -51,7 +51,7 @@ described as percent payload or a calibrated probability. At least 64 groups,
 nonconstant data, and usable positive-mask groups are required for a score.
 
 RGB planes stay separate; RGBA alpha is excluded. L-mode PNG uses a single plane.
-PNG palette, 16-bit, animated, malformed, over-32-MiB and over-8-million-pixel
+PNG palette, 16-bit, animated, malformed, over-200-MiB and over-50-million-pixel
 inputs are rejected. No input file/array is modified. Full-channel scores are
 combined using their median; any unavailable channel makes that method
 inconclusive. The report preserves all channels. Chi-square windows cover
@@ -120,6 +120,87 @@ LSB settings. Do not describe this small evaluation as proof of detector accurac
 - The existing stable hash masks the selected low bits across the entire carrier.
   At 8 LSBs, all image byte values are masked away; it cannot establish pixel
   integrity. This predates Kim's changes and should be reviewed by the core owners.
+
+## Audio and video: sample-pair analysis
+
+Implemented in `backend/stego/audio_analysis.py`; the Steganalysis page routes
+WAV files and the audio track of a video there (PNGs still use chi-square/RS).
+
+**Why not chi-square.** A 16-bit recording's value histogram is already smooth
+at the LSB scale, so neighbouring values such as 100/101 occur about equally
+often in clean audio. Chi-square then reports clean recordings as embedded
+(p = 1.00 on clean noise-like audio and on the sample video's clean track).
+
+**Method.** Consecutive samples in one channel form pairs (u, v). The trace
+m = floor(v/2) − floor(u/2) is unchanged by LSB replacement. Within trace m,
+b_m counts (even, odd) pairs, c_m (odd, even) pairs and T_m all pairs. Cover
+assumption: an odd difference d = 2m+1 is equally likely to start on an even
+or odd value, so b_m = c_{m+1}. This project's encoder writes one contiguous
+block, so replacing the LSBs of a share p of samples gives, in expectation,
+b'_m − c'_{m+1} = (p/4)(T_m − T_{m+1}) for every m. The estimate is a weighted
+least-squares fit of that line (Dumitrescu, Wu & Wang, 2003, adapted from their
+random-scatter model to block embedding).
+
+**Cross-fitting.** The slope T_m − T_{m+1} is counted from pairs at even
+positions and the residual from pairs at odd positions, then vice versa.
+Counting both from the same pairs shares their noise, which drags loud,
+uninformative audio towards p = 1 (a false alarm); cross-fitting drags it
+towards 0 with a wide standard error instead. The time map fits each of 16
+segments against the whole file's slope.
+
+**Decision (provisional).** Standard error above 0.1: *Inconclusive*. Otherwise
+*High indication* when the lower end of the 95% interval exceeds 3%, else *Low
+indication*.
+
+**Measured on this project's encoder (1 LSB, manual offset 100).** True share
+0 / 5 / 25 / 50 / 100%:
+
+| Source | Estimates | Standard error |
+|---|---|---:|
+| Sample sine tone (16-bit) | 0.00 / 0.03 / 0.22 / 0.47 / 0.97 | ≈0.01 |
+| Speech-like 16-bit (synthetic) | −0.01 / 0.03 / 0.23 / 0.47 / 0.96 | ≈0.02 |
+| Sample video audio track | −0.01 / 0.01 / 0.17 / 0.35 / 0.70 | ≈0.04 |
+| Loud music-like / pink noise | inconclusive | 1–7 |
+| 32-bit audio | inconclusive | >2 |
+
+**Limits.** It needs neighbouring samples that are close in value (quiet
+passages, pauses), so loud, noisy or 32-bit audio is usually inconclusive
+rather than detected. Partial 2+ LSB payloads are underestimated (25% at 2 LSB
+reads 0.04–0.15). The sample audio files are pure tones and the other sources
+are synthetic; validate on real recordings before relying on the thresholds.
+
+## Likelihood of hidden data
+
+After every analysis the page shows one headline figure: the chance that the
+file carries hidden data. It comes from sample-pair analysis (`backend/stego/spa.py`),
+which now also runs on PNGs, over horizontally adjacent pixels within each row
+of the R, G and B planes (alpha excluded). Chi-square and RS are still shown
+unchanged; their p-value and asymmetry score cannot be turned into a probability.
+
+**Calculation.** Two hypotheses are compared: *clean* (true share 0) and
+*hidden data* (true share uniform between 1% and 100% of values). Both start at
+50%. The SPA estimate is treated as normal around the true share, with its
+standard error widened by a natural cover bias (images ±2.5, audio ±2.0
+percentage points), because clean covers do not estimate exactly 0: the clean
+astronaut image reads 0.050 ± 0.005. Bayes' rule gives the posterior chance.
+With little evidence it stays near 50% instead of guessing.
+
+**Bands:** Unlikely (≤ 20%), Uncertain, Likely (≥ 80%); Unknown when no estimate
+is possible (for example a pure-noise image).
+
+**Measured on this project's encoder (1 LSB):**
+
+| Cover | Clean | 1 KB message | 25% full | 95% full |
+|---|---:|---:|---:|---:|
+| chelsea / clock_motion / coffee | 3–4% | 15–21% | 100% | 100% |
+| astronaut (naturally biased) | 30% | 62% | 100% | 100% |
+| cover_image.png | 2% | 8% | 100% | 100% |
+| Sample WAV (sine tone) | 2% | 99% | 100% | 100% |
+
+**Limits.** The prior, share range and cover-bias allowance are provisional
+choices, not calibrated on real-world files. Short messages in photographs are
+often missed. The figure is about hidden data, not tampering: tampering is
+decided on Verify by the signature and hashes.
 
 ## Short demo explanation
 

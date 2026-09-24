@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 venv/
 backend/keys/private_key.pem
+backend/keys/bob_private.pem
 backend/keys/saved/
 test_evidence/
 samples/*

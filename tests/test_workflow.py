@@ -198,11 +198,31 @@ def test_comparison_measurements(covers, keys):
     assert same["waveforms"]["before"] == same["waveforms"]["after"]
 
 
-def test_api_rejects_unagreed_combination(covers, keys):
+def test_api_rejects_unsupported_content_file(covers, keys):
     result = app.test_client().post("/api/encode", data={"cover_type":"image", "num_lsb":"1",
         "cover_file":(io.BytesIO(covers["image"]),"image.png"), "payload_type":"image",
-        "payload_file":(io.BytesIO(covers["image"]),"payload.png")})
+        "payload_file":(io.BytesIO(b"MZ"),"payload.exe")})
     assert result.status_code == 400
+
+
+@pytest.mark.parametrize("cover", ["image", "audio"])
+@pytest.mark.parametrize("content_type,filename,mime", [
+    ("file", "notes.txt", "text/plain"), ("image", "content.png", "image/png"),
+    ("audio", "content.wav", "audio/wav"), ("video", "clip.mkv", "video/x-matroska")])
+def test_api_any_cover_hides_any_content(cover, content_type, filename, mime, covers, keys):
+    data = b"hidden " + content_type.encode() * 20
+    client = app.test_client()
+    form = {"cover_type":cover, "num_lsb":"2", "start_mode":"manual", "manual_offset":"100",
+            "payload_type":content_type, "team_metadata":"{}"}
+    enc = client.post("/api/encode", data=form | {"cover_file":(io.BytesIO(covers[cover]),"cover." + ("png" if cover == "image" else "wav")),
+                                                  "payload_file":(io.BytesIO(data),filename)})
+    assert enc.status_code == 200, enc.json
+    dec = client.post("/api/decode", data={k: form[k] for k in ("cover_type","num_lsb","start_mode","manual_offset")}
+                      | {"public_key_pem":keys.decode(),
+                         "stego_file":(io.BytesIO(base64.b64decode(enc.json["stego_base64"])),"stego")}).json
+    assert dec["verdict"] == "Authentic"
+    assert base64.b64decode(dec["data_base64"]) == data
+    assert (dec["payload_type"], dec["data_filename"], dec["data_mime"]) == (content_type, filename, mime)
 
 
 def test_audio_32_bit(covers, keys):

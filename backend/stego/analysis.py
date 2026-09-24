@@ -13,9 +13,14 @@ import numpy as np
 from PIL import Image, UnidentifiedImageError
 from scipy.stats import chi2
 
+from . import spa
+
 VERSION = "kim-sa-1"
-MAX_PIXELS = 8_000_000
-MAX_FILE_BYTES = 32 * 1024 * 1024
+# Large enough for photos Protect can produce; RS and SPA count in row blocks
+# so memory stays bounded.
+MAX_PIXELS = 50_000_000
+MAX_FILE_BYTES = 200 * 1024 * 1024
+ROW_BLOCK = 512
 DEFAULT_THRESHOLDS = {"chi_square": 0.95, "rs": 0.05}
 LIMITATIONS = [
     "Statistical indication is not proof of hidden data, authenticity, or tampering.",
@@ -90,10 +95,16 @@ def rs_analysis(channel: np.ndarray) -> dict:
     if channel.ndim != 2:
         raise ValueError("RS expects a two-dimensional colour channel.")
     height, width = channel.shape
-    groups = channel[:, :width // 4 * 4].reshape(-1, 4)
-    positive = rs_counts(groups)
-    negative = rs_counts(groups, (0, -1, -1, 0))
-    n = len(groups)
+    # Counts add up across rows, so count a block of rows at a time.
+    positive, negative = {"regular": 0, "singular": 0, "unusable": 0}, {"regular": 0, "singular": 0, "unusable": 0}
+    for top in range(0, height, ROW_BLOCK):
+        groups = channel[top:top + ROW_BLOCK, :width // 4 * 4].reshape(-1, 4)
+        if not len(groups):
+            continue
+        for totals, mask in ((positive, (0, 1, 1, 0)), (negative, (0, -1, -1, 0))):
+            for key, value in rs_counts(groups, mask).items():
+                totals[key] += value
+    n = height * (width // 4)
     asymmetry = (abs(positive["regular"] - negative["regular"])
                  + abs(positive["singular"] - negative["singular"])) / (2 * n) if n else None
     usable = n >= 64 and np.unique(channel).size > 1 and (
@@ -126,13 +137,13 @@ def analyse_png(file_bytes: bytes, window_size: int = 65536, thresholds=None) ->
     if not isinstance(window_size, int) or not 256 <= window_size <= 1_000_000:
         raise ValueError("Window size must be 256-1000000 channel values.")
     if not file_bytes or len(file_bytes) > MAX_FILE_BYTES:
-        raise ValueError("Upload a nonempty PNG of at most 32 MiB.")
+        raise ValueError(f"Upload a nonempty PNG of at most {MAX_FILE_BYTES // (1024 * 1024)} MiB.")
     try:
         with Image.open(io.BytesIO(file_bytes)) as img:
             if img.format != "PNG" or img.mode not in ("RGB", "RGBA", "L"):
                 raise ValueError("Use an 8-bit RGB, RGBA, or grayscale PNG.")
             if img.width * img.height > MAX_PIXELS:
-                raise ValueError("Analysis supports images up to 8 million pixels.")
+                raise ValueError(f"Analysis supports images up to {MAX_PIXELS // 1_000_000} million pixels.")
             if getattr(img, "n_frames", 1) != 1:
                 raise ValueError("Animated PNG is not supported for analysis.")
             mode = img.mode
@@ -152,16 +163,25 @@ def analyse_png(file_bytes: bytes, window_size: int = 65536, thresholds=None) ->
             windows.append({k: result[k] for k in (
                 "sample_count", "statistic", "degrees_of_freedom", "score", "status")}
                            | {"start": start, "stop": min(start + effective_window, flat.size)})
-        channels[name] = {"chi_square": chi_square(flat), "rs": rs_analysis(channel),
+        counts = spa.row_pair_counts(channel)
+        spa_counts = counts if not channels else spa_counts + counts
+        channels[name] = {"chi_square": chi_square(flat), "rs": rs_analysis(channel), "spa": spa.estimate(counts),
                           "windows": windows, "effective_window_size": effective_window}
     scores = {}
     for method in ("chi_square", "rs"):
         values = [c[method]["score"] for c in channels.values()]
         scores[method] = float(np.median(values)) if all(v is not None for v in values) else None
+    # Sample-pair analysis over all colour planes: an estimated share of values
+    # carrying hidden bits, which also gives the likelihood of hidden data.
+    overall = spa.estimate(spa_counts)
+    values = len(names) * arr.shape[0] * arr.shape[1]
+    hidden_bytes = None if overall["estimate"] is None else int(max(0.0, min(1.0, overall["estimate"])) * values / 8)
     return {"analysis_version": VERSION, "created_at": datetime.now(timezone.utc).isoformat(),
             "file_sha256": hashlib.sha256(file_bytes).hexdigest(),
             "image": {"width": int(arr.shape[1]), "height": int(arr.shape[0]), "mode": mode},
             "configuration": {"requested_window_size": window_size, "aggregation": "median of all channel scores; any insufficient channel makes that method inconclusive", "alpha": "excluded"},
             "scores": scores, "channels": channels,
             "combined": combine(scores["chi_square"], scores["rs"], thresholds),
+            "spa": overall, "estimated_hidden_bytes_at_1_lsb": hidden_bytes,
+            "likelihood": spa.hidden_data_likelihood(overall["estimate"], overall["standard_error"], "image"),
             "limitations": list(LIMITATIONS)}

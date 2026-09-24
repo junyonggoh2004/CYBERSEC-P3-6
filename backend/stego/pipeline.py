@@ -8,6 +8,9 @@ plain dicts/dataclasses, so it is directly unit-testable (see tests/).
 """
 from __future__ import annotations
 
+import hashlib
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from time import perf_counter
@@ -291,6 +294,30 @@ def _mark_as_video(info: dict) -> dict:
     return info
 
 
+_VIDEO_AUDIO_CACHE: OrderedDict[bytes, tuple[bytes, dict]] = OrderedDict()
+_VIDEO_AUDIO_LOCK = threading.Lock()
+
+
+def video_audio_track(video_bytes: bytes) -> tuple[bytes, dict]:
+    """(pcm16_wav_bytes, video_info) for a video cover. Protect re-reviews
+    capacity on every edit, so the last couple of demuxes are cached rather
+    than re-running ffmpeg for the same upload each time."""
+    key = hashlib.sha256(video_bytes).digest()
+    with _VIDEO_AUDIO_LOCK:
+        if key in _VIDEO_AUDIO_CACHE:
+            _VIDEO_AUDIO_CACHE.move_to_end(key)
+            return _VIDEO_AUDIO_CACHE[key]
+    try:
+        extracted = video_lsb.extract_audio_track(video_bytes)
+    except VideoError as exc:
+        raise StegoError(str(exc)) from exc
+    with _VIDEO_AUDIO_LOCK:
+        _VIDEO_AUDIO_CACHE[key] = extracted
+        while len(_VIDEO_AUDIO_CACHE) > 2:
+            _VIDEO_AUDIO_CACHE.popitem(last=False)
+    return extracted
+
+
 def capacity_check(
     cover_type: str,
     cover_bytes: bytes,
@@ -302,11 +329,7 @@ def capacity_check(
     if cover_type != "video":
         return _capacity_check_core(cover_type, cover_bytes, num_lsb, start_mode, manual_offset, passphrase)
 
-    try:
-        wav_bytes, video_info = video_lsb.extract_audio_track(cover_bytes)
-    except VideoError as exc:
-        raise StegoError(str(exc)) from exc
-
+    wav_bytes, video_info = video_audio_track(cover_bytes)
     info = _capacity_check_core("audio", wav_bytes, num_lsb, start_mode, manual_offset, passphrase)
     info.cover_type = "video"
     info.cover_info = _mark_as_video({**video_info, **info.cover_info})
@@ -337,11 +360,7 @@ def encode(
             start_mode, manual_offset, passphrase, media_id, team_metadata, stego_out_name, hash_algorithm, key_id, encryption_public_pem,
         )
 
-    try:
-        wav_bytes, video_info = video_lsb.extract_audio_track(cover_bytes)
-    except VideoError as exc:
-        raise StegoError(str(exc)) from exc
-
+    wav_bytes, video_info = video_audio_track(cover_bytes)
     result = _encode_core(
         "audio", wav_bytes, payload_type, data, filename, mime, num_lsb,
         start_mode, manual_offset, passphrase, media_id, team_metadata, "stego_audio_track.wav", hash_algorithm, key_id, encryption_public_pem,
@@ -359,14 +378,24 @@ def encode(
     return result
 
 
-def prepare(cover_type, cover_bytes, data, payload_type="text", filename=None, mime=None,
-            media_id="", team_metadata=None, num_lsb=1, start_mode="manual", manual_offset=1,
-            passphrase=None, hash_algorithm="SHA-256", key_id=None, encryption_public_pem=None):
+def prepare(cover_type, cover_bytes, data, **options):
     """Exact fit for each depth, including field padding and signed metadata.
 
     Location derivation always uses SHA-256 independently of the chosen content
     hash, allowing extraction before the hash identifier has been recovered.
+    A video cover is measured on its audio track, exactly as encode() embeds it.
     """
+    if cover_type != "video":
+        return _prepare_core(cover_type, cover_bytes, data, **options)
+    wav_bytes, video_info = video_audio_track(cover_bytes)
+    result = _prepare_core("audio", wav_bytes, data, **options)
+    result["cover_info"] = _mark_as_video({**video_info, **result["cover_info"]})
+    return result
+
+
+def _prepare_core(cover_type, cover_bytes, data, payload_type="text", filename=None, mime=None,
+                  media_id="", team_metadata=None, num_lsb=1, start_mode="manual", manual_offset=1,
+                  passphrase=None, hash_algorithm="SHA-256", key_id=None, encryption_public_pem=None):
     num_lsb = validate_num_lsb(num_lsb)
     if team_metadata is not None and not isinstance(team_metadata, dict):
         raise ValueError("Team metadata must be a JSON object.")
@@ -433,8 +462,8 @@ def decode(cover_type, stego_bytes, num_lsb, start_mode, manual_offset, passphra
         "file_size_bytes": len(stego_bytes), "cover_type": cover_type,
         "key_fingerprint": fp, "num_lsb": num_lsb, "start_mode": start_mode,
         "start_index": result.start_index,
-        "carrier_unit": "PCM sample" if cover_type == "audio" else "image channel value",
-        "traversal": "Interleaved samples" if cover_type == "audio" else "Row-major channel order",
+        "carrier_unit": {"audio": "PCM sample", "video": "PCM sample (video audio track)"}.get(cover_type, "image channel value"),
+        "traversal": "Row-major channel order" if cover_type == "image" else "Interleaved samples",
         "checks": {"extraction": fields["extraction_status"] or ("Passed" if result.metadata is not None else "Failed"),
                    "record_binding": status(fields["record_match"]),
                    "signature": status(result.signature_valid),
@@ -466,11 +495,12 @@ def _decode_dispatch(
         return _decode_core(cover_type, stego_bytes, num_lsb, start_mode, manual_offset, passphrase, public_key_pem, decryption_private_pem)
 
     try:
-        wav_bytes, video_info = video_lsb.extract_audio_track(stego_bytes)
-    except VideoError as exc:
+        wav_bytes, video_info = video_audio_track(stego_bytes)
+    except StegoError as exc:
         return DecodeResult(
             verdict="Cannot Verify", detail=str(exc), payload_type=None, metadata=None, data=None,
             payload_hash_match=None, signature_valid=None, cover_hash_match=None, start_index=None, cover_info={},
+            evidence={"reason_code": "INVALID_MEDIA_OR_DEPTH", "extraction_status": "Not run"},
         )
 
     result = _decode_core("audio", wav_bytes, num_lsb, start_mode, manual_offset, passphrase, public_key_pem, decryption_private_pem)

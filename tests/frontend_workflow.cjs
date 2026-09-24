@@ -104,11 +104,12 @@ async function verify(verdict) {
   await wait(()=>!$('analysis-export').disabled,'analysis');
   assert.match($('chi-results').textContent,/Median p-value/);
   assert.match($('rs-results').textContent,/Median asymmetry/);
+  assert.equal($('likelihood-card').hidden,false);assert.match($('likelihood-value').textContent,/%|Unknown/); // the fixture is random noise, which gives no evidence
   assert.equal($('page-analysis').querySelectorAll('canvas').length,0,'histograms belong to Compare');
   set('window-size','1024');assert.equal($('analysis-export').disabled,true,'invalidate stale analysis');
   // Audio cover with an image payload uses the same user journey.
   w.location.hash='protect';file('cover-file','frontend-cover.wav','audio/wav');
-  set('payload-type','image');file('payload-file','frontend-payload.png','image/png');
+  w.document.querySelector('#payload-mode-tabs [data-mode="file"]').click();file('payload-file','frontend-payload.png','image/png');
   set('hash-algorithm','SHA-256');
   await wait(()=>!$('protect-button').disabled,'audio capacity');
   submit('protect-form');await wait(()=>$('created-info').textContent.includes('SHA-256') && !$('protect-button').disabled,'audio encode');
@@ -118,7 +119,14 @@ async function verify(verdict) {
   await wait(()=>!$('waveforms').hidden && !$('compare-button').disabled,'waveforms');
   assert.equal($('waveform-charts').querySelectorAll('canvas').length,3);
   assert.equal($('histograms').hidden,true);
+  // Audio steganalysis uses sample-pair analysis instead of chi-square/RS.
+  click('analyse-created');assert.equal($('window-field').hidden,true);submit('analysis-form');
+  await wait(()=>!$('analysis-export').disabled,'audio analysis');
+  assert.equal($('audio-analysis').hidden,false);assert.equal($('image-analysis').hidden,true);
+  assert.match($('spa-results').textContent,/Estimated share/);
+  assert.equal($('spa-chart').querySelectorAll('canvas').length,1);
+  assert.equal($('likelihood-card').hidden,false);assert.ok($('likelihood-band').textContent);
   assert.deepEqual(errors,[]);
-  console.log('PASS: Protect, SHA-512, exact capacity, Verify, wrong key, tampering, missing payload, Compare histograms, separate analysis, stale-state reset, WAV/image round trip and waveforms.');
+  console.log('PASS: Protect, SHA-512, exact capacity, Verify, wrong key, tampering, missing payload, Compare histograms, separate analysis, stale-state reset, WAV/image round trip, waveforms, audio sample-pair analysis and hidden-data likelihood.');
   dom.window.close();
 })().catch(error=>{console.error(error);dom.window.close();process.exitCode=1;});

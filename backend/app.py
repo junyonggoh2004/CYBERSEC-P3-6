@@ -20,9 +20,9 @@ from werkzeug.exceptions import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from stego import analysis, comparison, crypto_utils, jobs, pipeline  # noqa: E402
+from stego import analysis, audio_analysis, comparison, crypto_utils, jobs, pipeline  # noqa: E402
 from cryptography.hazmat.primitives import serialization
-from stego import audio_lsb, image_lsb, payload, media_input, encryption
+from stego import audio_lsb, image_lsb, payload, media_input, encryption, video_lsb
 from stego.bitstream import StegoStream
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
@@ -81,8 +81,8 @@ def _guess_mime(filename: str | None, fallback: str = "application/octet-stream"
 
 def _parse_common_fields(form):
     cover_type = form.get("cover_type", "").strip().lower()
-    if cover_type not in ("image", "audio"):
-        raise ValueError("cover_type must be 'image' or 'audio'.")
+    if cover_type not in pipeline.SUPPORTED_COVER_TYPES:
+        raise ValueError("cover_type must be 'image', 'audio' or 'video'.")
     num_lsb = int(form.get("num_lsb", 1))
     start_mode = form.get("start_mode", "manual").strip().lower()
     manual_offset = _int_or_none(form.get("manual_offset"))
@@ -151,6 +151,22 @@ def _encryption_key(form):
     return pem.encode()
 
 
+# Hidden-content files any cover can carry, keyed by payload type ("file" is a
+# text document). Explicit MIME types: the OS registry guess is unreliable for
+# formats such as .mkv on Windows.
+CONTENT_MIME_TYPES = {
+    "file": {".txt": "text/plain", ".md": "text/markdown", ".csv": "text/csv", ".json": "application/json"},
+    "image": {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
+              ".gif": "image/gif", ".bmp": "image/bmp",
+              ".tif": "image/tiff", ".tiff": "image/tiff"},
+    "audio": {".wav": "audio/wav", ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".flac": "audio/flac",
+              ".m4a": "audio/mp4", ".aac": "audio/aac",
+              ".aif": "audio/aiff", ".aiff": "audio/aiff"},
+    "video": {".mp4": "video/mp4", ".m4v": "video/mp4", ".mkv": "video/x-matroska", ".mov": "video/quicktime",
+              ".webm": "video/webm", ".avi": "video/x-msvideo"},
+}
+
+
 def _read_content(form, files, cover_type):
     kind = form.get("payload_type", "text")
     if kind == "text":
@@ -158,22 +174,17 @@ def _read_content(form, files, cover_type):
         if not text:
             raise ValueError("Enter a text message.")
         return kind, text.encode("utf-8"), None, "text/plain"
-    if kind not in ("image", "audio"):
-        raise ValueError("Choose text, image or audio content.")
+    if kind not in CONTENT_MIME_TYPES:
+        raise ValueError("Hidden content must be text, or a text, image, audio or video file.")
     upload = files.get("payload_file")
     if upload is None:
         raise ValueError("Choose a content file.")
+    mime = CONTENT_MIME_TYPES[kind].get(Path(upload.filename or "").suffix.lower())
+    if mime is None:
+        raise ValueError(f"Choose a supported {'text' if kind == 'file' else kind} file.")
     data = upload.read()
     if not data:
         raise ValueError("Content file is empty.")
-    mime = _guess_mime(upload.filename)
-    extension = Path(upload.filename or '').suffix.lower()
-    allowed = media_input.IMAGE_EXTENSIONS if kind == 'image' else media_input.AUDIO_EXTENSIONS
-    if extension not in allowed:
-        raise ValueError('Choose a supported image or audio extension.')
-    mime = {'.m4a': 'audio/mp4', '.aac': 'audio/aac', '.aif': 'audio/aiff', '.aiff': 'audio/aiff', '.flac': 'audio/flac', '.ogg': 'audio/ogg'}.get(extension, mime)
-    if not mime.startswith(kind + "/"):
-        raise ValueError(f"Choose a supported {kind} file.")
     return kind, data, upload.filename, mime
 
 
@@ -181,6 +192,9 @@ def _cover_bytes(upload, cover_type):
     if upload is None:
         raise ValueError("Choose a cover file.")
     data = upload.read()
+    if cover_type == "video":
+        # Videos are demuxed to their audio track later; never re-encode them here.
+        return data
     return media_input.normalise(data, cover_type, upload.filename)
 
 
@@ -205,12 +219,19 @@ def api_prepare():
 def api_compare():
     try:
         kind = request.form.get("cover_type")
-        if kind not in ("image", "audio"):
-            raise ValueError("Choose image or audio.")
+        if kind not in pipeline.SUPPORTED_COVER_TYPES:
+            raise ValueError("Choose image, audio or video.")
         before = _cover_bytes(request.files.get("original_file"), kind)
         after = _cover_bytes(request.files.get("stego_file"), kind)
-        return jsonify(comparison.compare(kind, before, after))
-    except (ValueError, OSError) as exc:
+        if kind != "video":
+            return jsonify(comparison.compare(kind, before, after))
+        # Video payloads live in the audio track, so compare the two audio tracks.
+        (before_wav, video_info), (after_wav, _) = pipeline.video_audio_track(before), pipeline.video_audio_track(after)
+        result = comparison.compare("audio", before_wav, after_wav)
+        result.update(cover_info={**video_info, **result["cover_info"], "embedded_in": "audio_track"},
+                      original_size_bytes=len(before), stego_size_bytes=len(after))
+        return jsonify(result)
+    except (ValueError, OSError, pipeline.StegoError) as exc:
         return _bad_request(str(exc))
 
 
@@ -220,8 +241,20 @@ def api_demo_tamper():
     try:
         kind, depth, mode, offset, secret = _parse_common_fields(request.form)
         data = _cover_bytes(request.files.get("stego_file"), kind)
+        video_source = None
+        if kind == "video":
+            # Tamper with the audio track copy, then remux it with the original video stream.
+            video_source, (data, _) = data, pipeline.video_audio_track(data)
+            kind = "audio"
         carrier = pipeline._load_carrier(kind, data)
         index, _ = pipeline._resolve_start(kind, carrier, depth, mode, offset, secret)
+
+        def modified_copy(detail):
+            output = image_lsb.carrier_to_png_bytes(carrier) if kind == "image" else audio_lsb.carrier_to_wav_bytes(carrier)
+            if video_source is not None:
+                output = video_lsb.remux_with_new_audio(video_source, output)
+            return jsonify({"stego_base64": _b64(output), "detail": detail})
+
         operation = request.form.get("tamper_mode")
         if operation == "payload":
             stream = StegoStream(carrier.array, index, depth)
@@ -235,8 +268,7 @@ def api_demo_tamper():
                 if unit >= len(carrier.array):
                     raise ValueError("Truncated encrypted package.")
                 carrier.array[unit] ^= 1
-                output = image_lsb.carrier_to_png_bytes(carrier) if kind == "image" else audio_lsb.carrier_to_wav_bytes(carrier)
-                return jsonify({"stego_base64": _b64(output), "detail": "Changed an encrypted package bit in a copy. Decryption should fail without releasing content."})
+                return modified_copy("Changed an encrypted package bit in a copy. Decryption should fail without releasing content.")
             if marker != payload.MAGIC:
                 raise ValueError("No supported package at these extraction settings.")
             version = stream.read(1)[0]
@@ -259,9 +291,8 @@ def api_demo_tamper():
             detail = "Changed a protected cover bit in a copy. Manual extraction can show a cover-hash mismatch; a cover-derived location may instead become unreadable."
         else:
             raise ValueError("Choose payload or cover tampering.")
-        output = image_lsb.carrier_to_png_bytes(carrier) if kind == "image" else audio_lsb.carrier_to_wav_bytes(carrier)
-        return jsonify({"stego_base64": _b64(output), "detail": detail})
-    except (ValueError, OSError, IndexError) as exc:
+        return modified_copy(detail)
+    except (ValueError, OSError, IndexError, pipeline.StegoError, video_lsb.VideoError) as exc:
         return _bad_request(str(exc))
 
 
@@ -484,26 +515,42 @@ def api_job_status(job_id):
     return jsonify({"status": "done", "result": result})
 
 
+def _analyse_video(data: bytes) -> dict:
+    wav_bytes, video_info = pipeline.video_audio_track(data)
+    return audio_analysis.analyse_audio(wav_bytes, source_bytes=data, video_info=video_info)
+
+
 @app.post("/api/analyse")
 def api_analyse():
-    """Independent PNG statistics; never change the verification verdict."""
+    """Independent statistics; never change the verification verdict. PNGs get
+    chi-square and RS; WAVs and video audio tracks get sample-pair analysis."""
     try:
-        upload = request.files.get("image_file")
+        upload = request.files.get("media_file") or request.files.get("image_file")
         if upload is None:
-            return _bad_request("image_file is required.")
-        data = upload.read(analysis.MAX_FILE_BYTES + 1)
-        window = int(request.form.get("window_size", 65536))
-        if not data or len(data) > analysis.MAX_FILE_BYTES:
-            return _bad_request("Upload a nonempty PNG of at most 32 MiB.")
-        if not 256 <= window <= 1_000_000:
-            return _bad_request("Window size must be 256-1000000 channel values.")
+            return _bad_request("media_file is required.")
         mode = request.args.get("mode", "sync")
-        if mode == "async":
-            return jsonify({"job_id": jobs.submit(analysis.analyse_png, data, window)})
-        if mode != "sync":
+        if mode not in ("sync", "async"):
             return _bad_request("mode must be 'sync' or 'async'.")
-        return jsonify(analysis.analyse_png(data, window))
-    except ValueError as exc:
+        head = upload.stream.read(12)
+        upload.stream.seek(0)
+        if head.startswith(b"\x89PNG\r\n\x1a\n"):
+            data = upload.read(analysis.MAX_FILE_BYTES + 1)
+            window = int(request.form.get("window_size", 65536))
+            if not data or len(data) > analysis.MAX_FILE_BYTES:
+                return _bad_request(f"Upload a nonempty PNG of at most {analysis.MAX_FILE_BYTES // (1024 * 1024)} MiB.")
+            if not 256 <= window <= 1_000_000:
+                return _bad_request("Window size must be 256-1000000 channel values.")
+            task, args = analysis.analyse_png, (data, window)
+        elif head[:4] == b"RIFF" and head[8:12] == b"WAVE":
+            task, args = audio_analysis.analyse_audio, (upload.read(),)
+        elif Path(upload.filename or "").suffix.lower() in CONTENT_MIME_TYPES["video"]:
+            task, args = _analyse_video, (upload.read(),)
+        else:
+            return _bad_request("Upload a PNG image, a PCM WAV file, or a video with an audio track.")
+        if mode == "async":
+            return jsonify({"job_id": jobs.submit(task, *args)})
+        return jsonify(task(*args))
+    except (ValueError, pipeline.StegoError) as exc:
         return _bad_request(str(exc))
 
 
