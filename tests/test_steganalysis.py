@@ -90,6 +90,23 @@ def test_rs_row_boundaries_and_tiny():
     assert analysis.rs_analysis(np.zeros((4, 3), dtype=np.uint8))["groups"] == 0
 
 
+def test_rs_message_fraction_estimator_detects_lsb_replacement():
+    y, x = np.indices((256, 256))
+    cover = np.clip(np.rint(128 + 35 * np.sin(x / 17) + 25 * np.cos(y / 23)
+                            + 15 * np.sin((x + y) / 31)), 0, 255).astype(np.uint8)
+    clean = analysis.rs_analysis(cover)
+    stego = cover.copy().ravel()
+    n = stego.size // 2
+    bits = np.random.default_rng(99).integers(0, 2, n, dtype=np.uint8)
+    stego[:n] = (stego[:n] & 0xFE) | bits
+    embedded = analysis.rs_analysis(stego.reshape(cover.shape))
+
+    assert clean["score"] < 0.01
+    assert embedded["score"] > 0.25
+    assert "flipped_positive" in embedded and "flipped_negative" in embedded
+    assert embedded["estimated_payload_fraction_raw"] == pytest.approx(embedded["score"])
+
+
 def test_alpha_exclusion_and_windows():
     rgb = np.random.default_rng(19).integers(0, 256, (64, 67, 3), dtype=np.uint8)
     rgba = np.concatenate([rgb, np.zeros((64, 67, 1), dtype=np.uint8)], axis=2)
@@ -101,13 +118,35 @@ def test_alpha_exclusion_and_windows():
         assert channel["windows"][-1]["stop"] == 64 * 67
 
 
+def test_chi_square_summary_uses_sustained_window_evidence():
+    y, x = np.indices((256, 256))
+    base = np.clip(np.rint(128 + 35 * np.sin(x / 17) + 25 * np.cos(y / 23)
+                          + 15 * np.sin((x + y) / 31)), 0, 255).astype(np.uint8)
+    rgb = np.stack([base, np.roll(base, 3, axis=0), np.roll(base, 5, axis=1)], axis=2)
+    stego = rgb.copy().reshape(-1)
+    n = stego.size // 2
+    bits = np.random.default_rng(101).integers(0, 2, n, dtype=np.uint8)
+    stego[:n] = (stego[:n] & 0xFE) | bits
+    result = analysis.analyse_png(png(stego.reshape(rgb.shape)), 4096)
+
+    assert result["scores"]["chi_square"] > 0.95
+    assert any(channel["chi_square_regional_median_score"] > channel["chi_square"]["score"]
+               for channel in result["channels"].values())
+
+
 def test_grayscale_and_constant():
     result = analysis.analyse_png(png(np.zeros((100, 100), dtype=np.uint8)))
     assert list(result["channels"]) == ["L"]
     assert result["combined"]["category"] == "Inconclusive"
 
 
-@pytest.mark.parametrize("chi,rs,expected", [(1, .1, "High indication"), (0, 0, "Low indication"), (1, 0, "Inconclusive"), (None, .1, "Inconclusive")])
+@pytest.mark.parametrize("chi,rs,expected", [
+    (1, .1, "High indication"),
+    (0, 0, "Low indication"),
+    (1, 0, "High indication"),
+    (None, .1, "High indication"),
+    (None, 0, "Inconclusive"),
+])
 def test_combination(chi, rs, expected):
     assert analysis.combine(chi, rs)["category"] == expected
 
@@ -208,7 +247,9 @@ def test_actual_encoder_png_saved_reopened_and_analysed(kind, monkeypatch, tmp_p
         assert report["file_sha256"] == hashlib.sha256(saved).hexdigest()
         assert "verdict" not in report
         reports.append(report)
-    assert reports[0]["scores"] == reports[1]["scores"]
+    assert reports[0]["scores"]["rs"] == pytest.approx(reports[1]["scores"]["rs"])
+    assert all(report["scores"]["chi_square"] is None or 0 <= report["scores"]["chi_square"] <= 1
+               for report in reports)
     assert len(reports[0]["channels"]["R"]["windows"]) > len(reports[1]["channels"]["R"]["windows"])
     decoded = pipeline.decode(cover_type="image", stego_bytes=saved, num_lsb=1,
         start_mode="manual", manual_offset=24, passphrase=None, public_key_pem=None)

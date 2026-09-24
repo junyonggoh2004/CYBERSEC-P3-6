@@ -250,7 +250,7 @@
       <details id="analysis-details" class="analysis-details">
         <summary>Details and explanation</summary>
         <p id="analysis-interpretation"></p>
-        <p>Chi-square tail scores and RS asymmetry are statistical clues, not probabilities of hidden text. Thresholds are provisional.</p>
+        <p>Chi-square tail scores and the RS replacement-fraction estimate are statistical clues, not probabilities of hidden text. Thresholds are provisional.</p>
       <h3>Analysed file</h3>
       <p id="analysis-file-details"></p>
       <p class="analysis-hash" id="analysis-file-hash"></p>
@@ -260,12 +260,12 @@
         <p>These settings came from the encoder response. They are not inferred by steganalysis and do not independently confirm payload recovery. Use Verify to check extraction and signatures.</p>
       </div>
       <h3>Whole-image results by channel</h3>
-      <p>Chi-square is the test statistic; df means degrees of freedom; the tail score is its p-value. The summary uses the median channel scores.</p>
-      <div class="analysis-table-scroll"><table class="log-table"><thead><tr><th>Channel</th><th>Chi-square / df / tail score</th><th>RS +mask R/S/U</th><th>RS inverse R/S/U</th><th>RS score</th></tr></thead><tbody id="analysis-rows"></tbody></table></div>
+      <p>Chi-square is the test statistic; df means degrees of freedom; the tail score is its p-value. Each channel summary uses the stronger of its whole-channel tail score and the median usable-window tail score; the overall score is the median channel summary. RS uses the Fridrich/Goljan/Du message-length estimate, bounded to 0–1 for scoring.</p>
+      <div class="analysis-table-scroll"><table class="log-table"><thead><tr><th>Channel</th><th>Chi-square / df / whole tail / summary</th><th>RS +mask R/S/U</th><th>RS inverse R/S/U</th><th>RS estimated fraction</th></tr></thead><tbody id="analysis-rows"></tbody></table></div>
       <h3>Chi-square window results</h3>
-      <p>Window size changes these regional results, not the whole-image score or verdict.</p>
+      <p>Window size changes these regional results and can change the chi-square summary score or verdict.</p>
       <p id="analysis-window-summary"></p>
-      <p>Windows are consecutive values within each colour plane. Positions are zero-based, with the end excluded. Inspecting many windows can produce chance high scores; window peaks do not change the combined category.</p>
+      <p>Windows are consecutive values within each colour plane. Positions are zero-based, with the end excluded. Inspecting many windows can produce chance high scores, so a single peak is not used for classification; the median usable-window score is used as sustained regional evidence.</p>
       <div class="analysis-table-scroll analysis-windows"><table class="log-table"><thead><tr><th>Channel</th><th>Window</th><th>Start–end</th><th>Values</th><th>Statistic / df</th><th>Tail score</th><th>Observation</th></tr></thead><tbody id="analysis-window-rows"></tbody></table></div>
       <ul id="analysis-limitations"></ul>
       <details id="analysis-raw-details"><summary>Raw statistics (JSON)</summary><pre id="analysis-json"></pre></details>

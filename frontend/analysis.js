@@ -60,19 +60,19 @@
       byId("analysis-encoding-details").textContent = `LSB depth: ${c.num_lsb}; start: ${c.start_unit} carrier units; signed container: ${c.container_bytes.toLocaleString()} bytes; available capacity from start: ${c.capacity_bytes.toLocaleString()} bytes; capacity used: ${usage}.`;
     }
     byId("analysis-category").textContent = result.combined.category;
-    byId("analysis-scores").textContent = `Chi-square tail score: ${format(result.scores.chi_square, true)}  |  RS score: ${format(result.scores.rs)}`;
+    byId("analysis-scores").textContent = `Chi-square summary score: ${format(result.scores.chi_square, true)}  |  RS estimated LSB-replacement fraction: ${format(result.scores.rs)}`;
     byId("analysis-interpretation").textContent = result.scores.chi_square == null
-      ? "Insufficient data for the whole-image chi-square score."
+      ? "Insufficient data for the chi-square summary score."
       : result.scores.chi_square < result.combined.thresholds.chi_square
-        ? "Weak whole-image evidence of pair equalisation. Hidden data may still be present, even when extraction succeeds."
-        : "Whole-image value pairs show equalisation compatible with LSB replacement; other causes are possible.";
+        ? "Weak chi-square evidence of pair equalisation. Hidden data may still be present, especially when payload bits are structured rather than approximately balanced."
+        : "Value-pair equalisation is compatible with LSB replacement; other causes are possible.";
     byId("analysis-rows").replaceChildren();
     byId("analysis-window-rows").replaceChildren();
     const summaries = [];
     for (const name of ["L", "R", "G", "B"]) {
       const channel = result.channels[name];
       if (!channel) continue;
-      addRow(byId("analysis-rows"), [name, `${format(channel.chi_square.statistic)} / ${channel.chi_square.degrees_of_freedom} / ${format(channel.chi_square.score, true)}`, counts(channel.rs.positive), counts(channel.rs.negative), format(channel.rs.score)]);
+      addRow(byId("analysis-rows"), [name, `${format(channel.chi_square.statistic)} / ${channel.chi_square.degrees_of_freedom} / ${format(channel.chi_square.score, true)} / ${format(channel.chi_square_summary_score, true)}`, counts(channel.rs.positive), counts(channel.rs.negative), format(channel.rs.score)]);
       const valid = channel.windows.filter((w) => w.score != null);
       const high = valid.filter((w) => w.score >= result.combined.thresholds.chi_square).length;
       const peak = valid.length ? Math.max(...valid.map((w) => w.score)) : null;
@@ -134,7 +134,7 @@
       result.input = { filename: file.name, byte_length: file.size,
         source: context ? "encoder_output" : "manual_upload", sha256_matches_selected_file: true,
         encoding_context: context, context_origin: context ? "Browser snapshot of encoder response; not inferred or independently verified" : null };
-      result.display_version = "steganalysis-ui-3";
+      result.display_version = "steganalysis-ui-4";
       render(result);
       report = result;
       byId("analysis-status").textContent = "Analysis complete. File match verified.";
