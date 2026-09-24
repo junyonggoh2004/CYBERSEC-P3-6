@@ -78,7 +78,7 @@ the same explanation on Verify). Previously some of these files produced
 |---|---|
 | Not a WAV (e.g. a renamed text file) | This file is not a WAV file. Please choose a 16-bit or 32-bit PCM WAV. |
 | Empty, or cut off in the header | This WAV file is empty or cut off before its audio data. Please use a complete WAV file. |
-| 32-bit float WAV | 32-bit float WAV is not supported (this tool embeds into integer PCM samples). Please export it as 16-bit or 32-bit PCM WAV. |
+| 32-bit float WAV | 32-bit float WAV isn't supported: this tool hides data in whole-number (PCM) samples. Please export it as 16-bit or 32-bit PCM WAV. |
 | Compressed (e.g. mu-law) | This WAV uses a compressed or non-PCM encoding. Please export it as 16-bit or 32-bit PCM WAV. |
 | 24-bit PCM | Unsupported WAV sample width: 24-bit PCM. Supported: 16-bit and 32-bit PCM. |
 | 8-bit PCM | 8-bit PCM WAV is not supported (too little headroom for reliable LSB embedding). Please use 16-bit or 32-bit PCM WAV. |

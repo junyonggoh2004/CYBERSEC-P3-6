@@ -157,12 +157,12 @@ def _extensible_float_wav():
 
 
 # Python < 3.12 cannot read any extensible header, so it gets that message instead.
-_EXTENSIBLE_FLOAT_MESSAGE = "float WAV is not supported" if sys.version_info >= (3, 12) else "extensible header"
+_EXTENSIBLE_FLOAT_MESSAGE = "float WAV isn't supported" if sys.version_info >= (3, 12) else "extensible header"
 
 BAD_WAVS = {
     "not a WAV": (b"this is not audio" * 10, "not a WAV file"),
     "empty file": (b"", "empty or cut off"),
-    "32-bit float": (_riff(_fmt(3, 1, 44100, 32), np.zeros(10, dtype=np.float32).tobytes()), "float WAV is not supported"),
+    "32-bit float": (_riff(_fmt(3, 1, 44100, 32), np.zeros(10, dtype=np.float32).tobytes()), "float WAV isn't supported"),
     "extensible float": (_extensible_float_wav(), _EXTENSIBLE_FLOAT_MESSAGE),
     "mu-law": (_riff(_fmt(7, 1, 8000, 8), b"\x7f" * 10), "compressed or non-PCM"),
     "24-bit PCM": (_wav_bytes(np.zeros(30, dtype=np.uint8), width=3), "24-bit PCM. Supported: 16-bit and 32-bit PCM"),
