@@ -51,7 +51,7 @@ def _unreadable_wav_message(exc: Exception) -> str:
         return "This file is not a WAV file. Please choose a 16-bit or 32-bit PCM WAV."
     if text == f"unknown format: {_WAVE_FORMAT_FLOAT}" or _FLOAT_SUBFORMAT in text:
         return (
-            "32-bit float WAV is not supported (LSB embedding needs integer samples). "
+            "32-bit float WAV is not supported (this tool embeds into integer PCM samples). "
             "Please export it as 16-bit or 32-bit PCM WAV."
         )
     if text == f"unknown format: {_WAVE_FORMAT_EXTENSIBLE}":
