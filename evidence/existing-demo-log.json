@@ -1,0 +1,68 @@
+{
+  "generated_at": 1789758529.9573598,
+  "results": [
+    {
+      "case": "Positive - image, short text payload",
+      "expected": "Authentic",
+      "actual": "Authentic",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "case": "Positive - audio, large text payload",
+      "expected": "Authentic",
+      "actual": "Authentic",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "case": "Positive - video (audio-track embedding)",
+      "expected": "Authentic",
+      "actual": "Authentic",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "case": "Negative - video, wrong passphrase / start location",
+      "expected": "Wrong Start Location",
+      "actual": "Wrong Start Location",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "case": "Negative - cover tampered after signing (payload intact)",
+      "expected": "Tampered",
+      "actual": "Tampered",
+      "pass": true,
+      "extra": "The payload itself is intact and correctly signed, but the cover file's visible/audible co"
+    },
+    {
+      "case": "Negative - hidden payload corrupted",
+      "expected": "Tampered",
+      "actual": "Tampered",
+      "pass": true,
+      "extra": "The extracted payload's hash does not match the signed hash - the hidden data was altered "
+    },
+    {
+      "case": "Negative - wrong public key",
+      "expected": "Signature Invalid",
+      "actual": "Signature Invalid",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "case": "Negative - wrong passphrase / start location",
+      "expected": "Wrong Start Location",
+      "actual": "Wrong Start Location",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "case": "Negative - oversized payload rejected",
+      "expected": "rejected",
+      "actual": "rejected",
+      "pass": true,
+      "extra": "Payload does not fit: container needs 10486301 bytes but only 73728 bytes are av"
+    }
+  ]
+}
