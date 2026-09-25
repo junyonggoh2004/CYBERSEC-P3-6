@@ -1,6 +1,6 @@
 "use strict";
 const $ = id => document.getElementById(id);
-const state = { keys: [], prepared: null, latest: null, received: null, pair: null, report: null, analysis: null, analysisFile: null, revision: 0, verifyRevision: 0, analysisRevision: 0, busy: false };
+const state = { keys: [], prepared: null, latest: null, received: null, pair: null, report: null, analysis: null, analysisFile: null, analysisContext: null, revision: 0, verifyRevision: 0, analysisRevision: 0, busy: false };
 const urls = new Map();
 const esc = value => String(value ?? "Unavailable").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
 const pretty = value => JSON.stringify(value, null, 2);
@@ -312,24 +312,82 @@ function renderDifferenceView() {
 }
 $("difference-view").onchange=renderDifferenceView;
 
-$("analysis-file").onchange=()=>{state.analysisFile=$("analysis-file").files[0];preview("analysis-preview",state.analysisFile);clearAnalysis();};
+$("analysis-file").onchange=()=>{state.analysisFile=$("analysis-file").files[0];state.analysisContext=null;preview("analysis-preview",state.analysisFile);clearAnalysis();};
+// Encoding context describes the file; it never feeds the blind classifier.
+function analysisSource() {
+  const file=state.analysisFile;
+  $("analysis-encoding").hidden=true;
+  if(!file){$("analysis-file-info").innerHTML='<p class="empty">Select a PNG, or use “Analyse stego PNG” after protecting a file.</p>';return;}
+  $("analysis-file-info").innerHTML=detailsTable([["Source",state.analysisContext?"Encoder output":"Manual upload"],["File",fileLabel(file)]]);
+}
 function clearAnalysis() {
   state.analysisRevision++;
   state.analysis=null;$("analysis-export").disabled=true;
-  $("chi-results").textContent="Run analysis to see measurements.";$("rs-results").textContent="Run analysis to see measurements.";
+  for(const id of ["chi-results","rs-results","window-results"])$(id).textContent="Run analysis to see measurements.";
   $("analysis-conclusion").textContent="No current results.";$("analysis-data").textContent="No report yet.";
+  analysisSource();
 }
 $("window-size").addEventListener("input",clearAnalysis);
 $("analyse-created").onclick=run(()=>{
   if(!state.latest||state.latest.settings.cover_type!=="image")throw new Error("Protect a PNG first.");
+  // Allowlist non-secret explanatory settings; no payloads, keys or passwords.
+  const r=state.latest.result;
+  state.analysisContext={num_lsb:r.num_lsb,start_unit:r.start_index,container_bytes:r.container_size_bytes,capacity_bytes:r.capacity_bytes};
   state.analysisFile=state.latest.file;$("analysis-file").value="";$("analysis-file").required=false;
   preview("analysis-preview",state.analysisFile);clearAnalysis();location.hash="analysis";
 });
+// WebCrypto exists only in secure contexts (HTTPS or localhost); elsewhere the
+// local hash comparison is skipped and reported rather than blocking analysis.
+async function sha256Hex(file) {
+  if(!globalThis.crypto?.subtle)return null;
+  const digest=await crypto.subtle.digest("SHA-256",await file.arrayBuffer());
+  return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");
+}
+function renderAnalysis(job) {
+  const fmt=(v,tail=false)=>{
+    if(v==null||!Number.isFinite(v))return "Insufficient data";
+    if(tail&&v===0)return "Below numerical precision (returned 0)";
+    return v>0&&v<0.0001?v.toExponential(4):Number(v).toFixed(5);
+  };
+  const counts=c=>c.regular+" / "+c.singular+" / "+c.unusable;
+  const thresholds=job.combined.thresholds;
+  const indication=(score,threshold)=>score==null?"Insufficient data":score>=threshold?"Indicators detected":"No strong indicators";
+  const channels=Object.entries(job.channels);
+  $("analysis-file-info").innerHTML=detailsTable([["Source",job.input.encoding_context?"Encoder output":"Manual upload"],["File",job.input.filename+" · "+bytes(job.input.byte_length)],["Image",job.image.width+" × "+job.image.height+" · "+job.image.mode],["SHA-256 of analysed PNG",job.file_sha256]]);
+  const context=job.input.encoding_context;
+  $("analysis-encoding").hidden=!context;
+  if(context) {
+    const usage=context.capacity_bytes>0?(100*context.container_bytes/context.capacity_bytes).toFixed(2)+"%":"Unavailable";
+    $("analysis-encoding-details").innerHTML=detailsTable([["LSB depth",context.num_lsb],["Start",context.start_unit+" carrier units"],["Signed container",bytes(context.container_bytes)],["Capacity from start",bytes(context.capacity_bytes)],["Capacity used",usage]]);
+  }
+  const chiNote=job.scores.chi_square==null?"Insufficient data for the chi-square summary score."
+    :job.scores.chi_square<thresholds.chi_square?"Weak chi-square evidence of pair equalisation. Hidden data may still be present, especially when payload bits are structured rather than approximately balanced."
+    :"Value-pair equalisation is compatible with LSB replacement; other causes are possible.";
+  $("chi-results").innerHTML=detailsTable([["Summary tail score",fmt(job.scores.chi_square,true)],["Threshold (provisional)",thresholds.chi_square],["Interpretation",indication(job.scores.chi_square,thresholds.chi_square)],["Note",chiNote]])
+    +'<div class="table-wrap">'+table(["Channel","χ²","df","Whole-channel tail","Window median tail","Channel summary"],channels.map(([name,c])=>[name,fmt(c.chi_square.statistic),c.chi_square.degrees_of_freedom,fmt(c.chi_square.score,true),fmt(c.chi_square_regional_median_score,true),fmt(c.chi_square_summary_score,true)]))+"</div>";
+  $("rs-results").innerHTML=detailsTable([["Estimated LSB-replacement fraction",fmt(job.scores.rs)],["Threshold (provisional)",thresholds.rs],["Interpretation",indication(job.scores.rs,thresholds.rs)],["Masks","[0,1,1,0] / [0,-1,-1,0]"]])
+    +'<div class="table-wrap">'+table(["Channel","Groups","+mask R / S / U","Inverse R / S / U","Estimated fraction"],channels.map(([name,c])=>[name,c.rs.groups,counts(c.rs.positive),counts(c.rs.negative),fmt(c.rs.score)]))+"</div>";
+  const summaries=[], rows=[];
+  for(const [name,c] of channels) {
+    const valid=c.windows.filter(w=>w.score!=null);
+    const high=valid.filter(w=>w.score>=thresholds.chi_square).length;
+    const peak=valid.length?Math.max(...valid.map(w=>w.score)):null;
+    summaries.push([name,c.windows.length+" windows of "+c.effective_window_size+" values · "+valid.length+" usable · "+high+" at/above threshold · peak "+fmt(peak,true)]);
+    c.windows.forEach((w,i)=>rows.push([name,i+1,w.start+"–"+w.stop,w.sample_count,fmt(w.statistic)+" / "+w.degrees_of_freedom,fmt(w.score,true),w.score==null?"Insufficient data":w.score>=thresholds.chi_square?"At/above threshold":"Below threshold"]));
+  }
+  $("window-results").innerHTML=detailsTable([["Requested window size",job.configuration.requested_window_size+" (may increase to limit each channel to 128 windows)"],...summaries])
+    +'<details><summary>All windows</summary><div class="table-wrap analysis-windows">'+table(["Channel","Window","Start–end","Values","Statistic / df","Tail score","Observation"],rows)+"</div></details>";
+  $("analysis-conclusion").textContent=({"High indication":"High indication: at least one method crossed its threshold. This is statistical evidence compatible with LSB replacement, not proof of hidden data.","Low indication":"Low indication: both methods are below their thresholds. This does not establish absence of hidden data.","Inconclusive":"Inconclusive: neither method crossed its threshold and at least one had insufficient data."})[job.combined.category];
+  $("analysis-limitations").replaceChildren(...job.limitations.map(text=>{const li=document.createElement("li");li.textContent=text;return li;}));
+  $("analysis-data").textContent=pretty(job);
+}
 $("analysis-form").onsubmit=run(async e=>{
   e.preventDefault();if(!state.analysisFile)throw new Error("Choose a PNG to analyse.");
-  const file=state.analysisFile, data=new FormData();data.append("image_file",file);data.append("window_size",$("window-size").value);
-  clearAnalysis();const revision=state.analysisRevision;$("analysis-button").disabled=true;$("analysis-status").textContent="Analysing image channels…";
+  if(state.analysisFile.size>32*1024*1024)throw new Error("Analysis supports PNG files up to 32 MiB.");
+  const file=state.analysisFile, context=state.analysisContext?{...state.analysisContext}:null, data=new FormData();data.append("image_file",file);data.append("window_size",$("window-size").value);
+  clearAnalysis();const revision=state.analysisRevision;$("analysis-button").disabled=true;$("analysis-status").textContent="Analysing exact PNG bytes…";
   try {
+    const expectedHash=await sha256Hex(file);
     let job=await api("/api/analyse?mode=async",data);
     while(job.job_id) {
       const id=job.job_id;await new Promise(resolve=>setTimeout(resolve,400));
@@ -339,14 +397,12 @@ $("analysis-form").onsubmit=run(async e=>{
       job=progress.result;
     }
     if(file!==state.analysisFile||revision!==state.analysisRevision)return;
+    if(expectedHash&&job.file_sha256!==expectedHash)throw new Error("Analysed file hash did not match the selected PNG. No result displayed.");
+    job.input={filename:file.name,byte_length:file.size,source:context?"encoder_output":"manual_upload",sha256_matches_selected_file:expectedHash?true:null,
+      encoding_context:context,context_origin:context?"Browser snapshot of encoder response; not inferred or independently verified":null};
+    renderAnalysis(job);
     state.analysis=job;$("analysis-export").disabled=false;
-    const fmt=v=>v==null?"Insufficient data":Number(v).toPrecision(5);
-    const indication=(score,threshold)=>score==null?"Inconclusive":score>=threshold?"Indicators detected":"No strong indicators";
-    $("chi-results").innerHTML=detailsTable([["Median p-value",fmt(job.scores.chi_square)],["Threshold (provisional)",job.combined.thresholds.chi_square],["Interpretation",indication(job.scores.chi_square,job.combined.thresholds.chi_square)]])+table(["Channel","χ²","df","p-value","Usable pairs"],Object.entries(job.channels).map(([name,c])=>[name,fmt(c.chi_square.statistic),c.chi_square.degrees_of_freedom,fmt(c.chi_square.score),c.chi_square.usable_pairs]));
-    $("rs-results").innerHTML=detailsTable([["Median asymmetry",fmt(job.scores.rs)],["Threshold (provisional)",job.combined.thresholds.rs],["Interpretation",indication(job.scores.rs,job.combined.thresholds.rs)],["Masks","[0,1,1,0] / [0,-1,-1,0]"]])+table(["Channel","Groups","R+ / S+","R− / S−","Score"],Object.entries(job.channels).map(([name,c])=>[name,c.rs.groups,c.rs.positive.regular+" / "+c.rs.positive.singular,c.rs.negative.regular+" / "+c.rs.negative.singular,fmt(c.rs.score)]));
-    $("analysis-conclusion").textContent=({"High indication":"Indicators detected by both methods.","Low indication":"No strong indicators at these thresholds. This does not establish absence of hidden data.","Inconclusive":"Inconclusive: methods disagree or data is insufficient."})[job.combined.category];
-    $("analysis-limitations").replaceChildren(...job.limitations.map(text=>{const li=document.createElement("li");li.textContent=text;return li;}));
-    $("analysis-data").textContent=pretty(job);$("analysis-status").textContent="Completed · "+fileLabel(file)+" · "+job.image.width+" × "+job.image.height+" · "+job.image.mode;
+    $("analysis-status").textContent="Completed · "+(expectedHash?"file match verified":"file match not checked (WebCrypto unavailable)")+" · "+fileLabel(file)+" · "+job.image.width+" × "+job.image.height+" · "+job.image.mode;
   } catch(error){$("analysis-status").textContent=error.message;throw error;}
   finally{$("analysis-button").disabled=false;}
 });

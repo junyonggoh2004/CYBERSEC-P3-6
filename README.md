@@ -132,10 +132,13 @@ the original generated file remains available.
 - LSB replacement is fragile under lossy compression, resampling and conversion.
   Decoding does not restore the overwritten original carrier bits.
 - Comparison metrics describe changes, not authenticity.
-- Chi-square p-values are not probabilities that secret data exists. RS uses
-  mask asymmetry, not an estimated payload length. Thresholds are provisional;
-  both false positives and missed payloads are possible. Higher-depth analysis is
-  exploratory. An Authentic file can also show hidden-data indicators.
+- Chi-square p-values are not probabilities that secret data exists. Each channel
+  uses the stronger of its whole-channel and median-window tail score. RS reports
+  the Fridrich/Goljan/Du estimate of the LSB-replacement fraction (bounded 0–1),
+  not a probability. Either method crossing its threshold gives High indication.
+  Thresholds are provisional; both false positives and missed payloads are
+  possible. Higher-depth analysis is outside the formal model. An Authentic file
+  can also show hidden-data indicators.
 - Demo private keys are stored unencrypted locally. Additional pairs live in
   ignored `backend/keys/saved/`; existing legacy key files are preserved.
   Import/export public keys separately and check their fingerprints.
