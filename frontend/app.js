@@ -9,7 +9,28 @@ const bytes = value => value < 1024 ? value + " B" : value < 1048576 ? (value / 
 // carriers (backend/stego/media_input.py); videos are embedded in their audio track.
 const kindOf = file => file && (/\.(png|jpe?g|webp|bmp|tiff?)$/i.test(file.name) ? "image" : /\.(wav|mp3|flac|ogg|m4a|aac|aiff?)$/i.test(file.name) ? "audio" : /\.(mp4|mkv|mov|avi|webm|m4v)$/i.test(file.name) ? "video" : null);
 const fileLabel = file => file ? file.name + " · " + bytes(file.size) : "No file selected";
-function notice(message, error = false) { $("notice").textContent = message; $("notice").classList.toggle("error", error); $("notice").hidden = !message; }
+// An upload error floats over the upload area it concerns; other messages
+// float at the top of the window. Neither shifts the page layout.
+let noticeAnchor = null;
+function placeNotice() {
+  const el = $("notice"), anchored = !el.hidden && !!noticeAnchor?.getClientRects().length;
+  el.classList.toggle("anchored", anchored);
+  if (!anchored) { el.style.top = el.style.left = el.style.width = ""; return; }
+  const box = noticeAnchor.getBoundingClientRect(), parent = (el.offsetParent || document.body).getBoundingClientRect();
+  el.style.top = (box.top - parent.top + box.height / 2) + "px";
+  el.style.left = (box.left - parent.left + box.width / 2) + "px";
+  el.style.width = Math.max(240, Math.min(640, box.width - 24)) + "px";
+}
+function notice(message, error = false, anchor = null) {
+  $("notice-text").textContent = message; $("notice").classList.toggle("error", error); $("notice").hidden = !message;
+  noticeAnchor = message ? anchor : null; placeNotice();
+}
+$("notice-close").onclick = () => notice("");
+window.addEventListener("resize", placeNotice);
+function uploadAreaFor(target) {
+  if (!target?.closest) return null;
+  return target.closest(".dropzone") || target.closest("form")?.querySelector(".dropzone") || null;
+}
 async function api(path, data) {
   const response = await fetch(path, data ? { method: "POST", body: data } : {});
   let result;
@@ -17,7 +38,7 @@ async function api(path, data) {
   if (!response.ok || result.error) throw new Error(result.error || "Request failed (" + response.status + ").");
   return result;
 }
-function run(handler) { return async event => { try { await handler(event); } catch (error) { notice(error.message, true); } }; }
+function run(handler) { return async event => { try { await handler(event); } catch (error) { notice(error.message, true, uploadAreaFor(event?.target)); } }; }
 function table(headers, rows) { return '<table><thead><tr>' + headers.map(x => "<th>" + esc(x) + "</th>").join("") + "</tr></thead><tbody>" + rows.map(row => "<tr>" + row.map(x => "<td>" + esc(x) + "</td>").join("") + "</tr>").join("") + "</tbody></table>"; }
 function detailsTable(rows) { return '<table class="detail-table"><tbody>' + rows.map(([key,value]) => "<tr><th>" + esc(key) + "</th><td>" + esc(value) + "</td></tr>").join("") + "</tbody></table>"; }
 function metrics(id, items) { $(id).innerHTML = items.map(([name,value]) => '<div class="metric"><span>' + esc(name) + "</span><strong>" + esc(value) + "</strong></div>").join(""); }
