@@ -1,8 +1,10 @@
-# Steganalysis implementation record — prepared for review
 
-This records the implementation produced with Codex assistance on 19 September
-2026. It is not a signed declaration or evidence that Kim or another team member
-has personally reviewed the code yet.
+
+
+
+
+
+# Steganalysis implementation record — prepared for review
 
 | Task | Delivered work | Review status |
 |---|---|---|
@@ -36,7 +38,3 @@ has personally reviewed the code yet.
 - `scripts/fetch_analysis_samples.py`: optional public-sample download.
 - `tests/test_steganalysis.py`: mathematical, API, crypto and pipeline checks.
 - `docs/STEGANALYSIS_GUIDE.md`: formulas, assumptions, limitations and demo guide.
-
-Kim should personally run and explain the tests, check the equations, inspect
-misses/false alarms, and obtain the named reviews before changing the task status
-to Done or adopting this record in the final contribution statement.

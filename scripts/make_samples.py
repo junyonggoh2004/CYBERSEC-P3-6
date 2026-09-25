@@ -8,8 +8,6 @@ without needing to source real-world image/audio files first:
   samples/cover_video.mp4    - ~4s test-pattern video with a sine-tone audio
                                track (for the video/audio-track-embedding
                                optional-challenge demo)
-  A payload_note.mp3-like sample is NOT generated (bring your own MP3 for the
-  "hide an audio/mp3 file" demo case) - any small .wav also works.
 
 Run: python scripts/make_samples.py
 """

@@ -2,21 +2,26 @@
 
 ## Scope and status
 
-Implemented within the existing Flask/browser architecture, not the proposed
-PySide6 layout. Kim's SA-001/002/003 code, SA-004 evaluation, and an SA-005
-integration are ready for team review. No teammate review is claimed. Optional
-WAV statistics (SA-006) are deferred. This is AI-assisted code requiring Kim's
-own understanding and the named reviewers' checks before marking tasks Done.
+This guide focuses explicitly on the Steganalysis functionality and implementation.
 
 ## Run
 
 From the project root in PowerShell:
 
+# Windows
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.\.venv\Scripts\python.exe -m pytest tests/test_steganalysis.py -q
-.\.venv\Scripts\python.exe backend/app.py
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python backend/app.py
+```
+
+# For MacOS:
+```
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python backend/app.py
 ```
 
 Open http://127.0.0.1:5000 and scroll to **PNG Steganalysis**. Choose a clean or
@@ -131,6 +136,3 @@ LSB settings. Do not describe this small evaluation as proof of detector accurac
 5. Explain that cryptographic verification is separate and that the RS output is
    an asymmetry indicator, not an embedding-rate estimate.
 
-Before submission: Kim validates the explanation, Gerome reviews evidence,
-Jun Yong reviews chi-square, and Gabriel reviews RS. No emails, submission,
-originality signatures, or teammate approvals have been performed automatically.
