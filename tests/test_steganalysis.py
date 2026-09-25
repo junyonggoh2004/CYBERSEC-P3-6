@@ -235,6 +235,9 @@ def test_actual_encoder_png_saved_reopened_and_analysed(kind, monkeypatch, tmp_p
     monkeypatch.setattr(crypto_utils, "load_private_key", lambda: key)
     monkeypatch.setattr(crypto_utils, "load_public_key", lambda *_: key.public_key())
     monkeypatch.setattr(crypto_utils, "public_key_pem", lambda: public_pem)
+    # The encoder encrypts to Bob's recipient key; keep it in memory as well.
+    recipient = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    monkeypatch.setattr(crypto_utils, "recipient_key", lambda: recipient)
     rng = np.random.default_rng(20923)
     cover = png(rng.integers(0, 256, (256, 256, 3), dtype=np.uint8))
     payload = b"Actual encoder test message. " * 400 if kind == "text" else wav()
@@ -263,6 +266,7 @@ def test_actual_encoder_png_saved_reopened_and_analysed(kind, monkeypatch, tmp_p
                for report in reports)
     assert len(reports[0]["channels"]["R"]["windows"]) > len(reports[1]["channels"]["R"]["windows"])
     decoded = pipeline.decode(cover_type="image", stego_bytes=saved, num_lsb=1,
-        start_mode="manual", manual_offset=24, passphrase=None, public_key_pem=None)
+        start_mode="manual", manual_offset=24, passphrase=None, public_key_pem=None,
+        decryption_private_pem=crypto_utils.private_pem(recipient))
     assert decoded.verdict == "Authentic"
     assert decoded.data == payload

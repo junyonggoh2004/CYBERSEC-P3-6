@@ -15,7 +15,7 @@ from .bitstream import StegoStream
 MAGIC = b"STG1"
 VERSION = 2
 PAYLOAD_TYPE_TEXT, PAYLOAD_TYPE_FILE, PAYLOAD_TYPE_AUDIO = 0, 1, 2
-PAYLOAD_TYPE_NAMES = {0: "text", 1: "file", 2: "audio", 3: "image"}
+PAYLOAD_TYPE_NAMES = {0: "text", 1: "file", 2: "audio", 3: "image", 4: "video"}
 PAYLOAD_TYPE_CODES = {v: k for k, v in PAYLOAD_TYPE_NAMES.items()}
 
 

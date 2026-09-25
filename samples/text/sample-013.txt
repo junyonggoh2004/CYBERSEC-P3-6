@@ -1,0 +1,13 @@
+StegaSure sample message 13
+Hash the recovered payload and compare its signed digest.
+Verify the signer with a public key received through a trusted channel.
+Derived start locations require the same private seed at extraction.
+Steganography does not encrypt the hidden message.
+Hash the recovered payload and compare its signed digest.
+Verify the signer with a public key received through a trusted channel.
+Derived start locations require the same private seed at extraction.
+Steganography does not encrypt the hidden message.
+Hash the recovered payload and compare its signed digest.
+Verify the signer with a public key received through a trusted channel.
+Derived start locations require the same private seed at extraction.
+Steganography does not encrypt the hidden message.

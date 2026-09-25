@@ -1,11 +1,13 @@
 "use strict";
 const $ = id => document.getElementById(id);
-const state = { keys: [], prepared: null, latest: null, received: null, pair: null, report: null, analysis: null, analysisFile: null, analysisContext: null, revision: 0, verifyRevision: 0, analysisRevision: 0, busy: false };
+const state = { keys: [], prepared: null, latest: null, received: null, pair: null, report: null, analysis: null, analysisFile: null, revision: 0, verifyRevision: 0, analysisRevision: 0, busy: false, payloadMode: "text" };
 const urls = new Map();
 const esc = value => String(value ?? "Unavailable").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
 const pretty = value => JSON.stringify(value, null, 2);
 const bytes = value => value < 1024 ? value + " B" : value < 1048576 ? (value / 1024).toFixed(1) + " KiB" : (value / 1048576).toFixed(1) + " MiB";
-const kindOf = file => file && (/\.png$/i.test(file.name) ? "image" : /\.wav$/i.test(file.name) ? "audio" : null);
+// Covers the backend can use: images and audio are converted to lossless PNG/WAV
+// carriers (backend/stego/media_input.py); videos are embedded in their audio track.
+const kindOf = file => file && (/\.(png|jpe?g|webp|bmp|tiff?)$/i.test(file.name) ? "image" : /\.(wav|mp3|flac|ogg|m4a|aac|aiff?)$/i.test(file.name) ? "audio" : /\.(mp4|mkv|mov|avi|webm|m4v)$/i.test(file.name) ? "video" : null);
 const fileLabel = file => file ? file.name + " · " + bytes(file.size) : "No file selected";
 function notice(message, error = false) { $("notice").textContent = message; $("notice").classList.toggle("error", error); $("notice").hidden = !message; }
 async function api(path, data) {
@@ -23,20 +25,59 @@ function objectURL(id, blob) { if (urls.has(id)) URL.revokeObjectURL(urls.get(id
 function download(blob, filename) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(a.href),1000); }
 function exportJSON(value, filename) { download(new Blob([pretty(value)],{type:"application/json"}),filename); }
 function fromBase64(data, type, name) { const raw = atob(data); const buffer = Uint8Array.from(raw,c=>c.charCodeAt(0)); return new File([buffer],name,{type}); }
-async function preview(id, file, text) {
+// caption=false where a drop zone beside the preview already names the file.
+async function preview(id, file, text, caption = true) {
   const el = $(id); el.replaceChildren();
   if (text !== undefined) { const p = document.createElement("div"); p.className="content-text"; p.textContent=text; el.append(p); return; }
   if (!file) { const p = document.createElement("p"); p.className="empty"; p.textContent="No object selected."; el.append(p); return; }
   const mime = file.type || "";
   if (/^image\/(png|jpeg|gif|webp)$/.test(mime) || /\.(png|jpe?g)$/i.test(file.name)) {
     const img = document.createElement("img"); img.alt = file.name; img.src = objectURL(id,file); el.append(img);
-  } else if (mime.startsWith("audio/") || /\.(wav|mp3|ogg|flac|m4a)$/i.test(file.name)) {
+  } else if (mime.startsWith("video/") || /\.(mp4|mkv|mov|avi|webm|m4v)$/i.test(file.name)) {
+    const video = document.createElement("video"); video.controls=true; video.preload="metadata"; video.src=objectURL(id,file); el.append(video);
+  } else if (mime.startsWith("audio/") || /\.(wav|mp3|flac|ogg|m4a|aac|aiff?)$/i.test(file.name)) {
     const audio = document.createElement("audio"); audio.controls=true; audio.preload="metadata"; audio.src=objectURL(id,file); el.append(audio);
   } else if (mime.startsWith("text/") && file.size < 100000) {
     const p = document.createElement("div"); p.className="content-text"; p.textContent=await file.text(); el.append(p);
   }
-  const caption = document.createElement("p"); caption.textContent=fileLabel(file); el.append(caption);
+  if (!caption) return;
+  const label = document.createElement("p"); label.textContent=fileLabel(file); el.append(label);
 }
+// Wraps a plain <input type=file> so it can also be dropped onto: the input
+// stays the single source of truth (FormData still picks it up by name), a
+// drop just assigns DataTransfer.files to it and re-dispatches "change" so
+// every existing input-driven handler keeps working unchanged.
+function attachDropzone(cfg) {
+  const drop=$(cfg.drop), input=$(cfg.input), placeholder=$(cfg.placeholder), info=$(cfg.info), filenameEl=$(cfg.filename);
+  function refresh(fileOverride) {
+    const file = fileOverride !== undefined ? fileOverride : input.files[0];
+    placeholder.hidden = !!file; info.hidden = !file;
+    if (file) filenameEl.textContent = fileLabel(file);
+  }
+  input.addEventListener("change", () => refresh());
+  // input.click() bubbles back up to the zone; ignore that echo so the picker opens once.
+  drop.addEventListener("click", e => { if (e.target !== input && !e.target.closest("button")) input.click(); });
+  drop.addEventListener("keydown", e => { if ((e.key==="Enter"||e.key===" ") && e.target===drop) { e.preventDefault(); input.click(); } });
+  ["dragenter","dragover"].forEach(evt => drop.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); drop.classList.add("dragover"); }));
+  ["dragleave","dragend"].forEach(evt => drop.addEventListener(evt, () => drop.classList.remove("dragover")));
+  drop.addEventListener("drop", e => {
+    e.preventDefault(); e.stopPropagation(); drop.classList.remove("dragover");
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length) { input.files = files; input.dispatchEvent(new Event("change",{bubbles:true})); }
+  });
+  if (cfg.change) $(cfg.change).onclick = e => { e.stopPropagation(); input.click(); };
+  if (cfg.remove) $(cfg.remove).onclick = e => { e.stopPropagation(); input.value=""; input.dispatchEvent(new Event("change",{bubbles:true})); };
+  refresh();
+  return { refresh };
+}
+const dropzones = {
+  cover: attachDropzone({drop:"cover-drop",input:"cover-file",placeholder:"cover-drop-placeholder",info:"cover-drop-fileinfo",filename:"cover-drop-filename",change:"cover-drop-change",remove:"cover-drop-remove"}),
+  payload: attachDropzone({drop:"payload-drop",input:"payload-file",placeholder:"payload-drop-placeholder",info:"payload-drop-fileinfo",filename:"payload-drop-filename",change:"payload-drop-change",remove:"payload-drop-remove"}),
+  received: attachDropzone({drop:"received-drop",input:"received-file",placeholder:"received-drop-placeholder",info:"received-drop-fileinfo",filename:"received-drop-filename",change:"received-drop-change",remove:"received-drop-remove"}),
+  compareOriginal: attachDropzone({drop:"compare-original-drop",input:"compare-original",placeholder:"compare-original-drop-placeholder",info:"compare-original-drop-fileinfo",filename:"compare-original-drop-filename",change:"compare-original-drop-change",remove:"compare-original-drop-remove"}),
+  compareStego: attachDropzone({drop:"compare-stego-drop",input:"compare-stego",placeholder:"compare-stego-drop-placeholder",info:"compare-stego-drop-fileinfo",filename:"compare-stego-drop-filename",change:"compare-stego-drop-change",remove:"compare-stego-drop-remove"}),
+  analysis: attachDropzone({drop:"analysis-drop",input:"analysis-file",placeholder:"analysis-drop-placeholder",info:"analysis-drop-fileinfo",filename:"analysis-drop-filename",change:"analysis-drop-change",remove:"analysis-drop-remove"}),
+};
 function navigate() {
   const name = location.hash.slice(1) || "protect";
   const page = $( "page-" + name ) ? name : "protect";
@@ -87,22 +128,32 @@ function updateBits() {
   const depth=Number($("lsb").value);
   $("bits").innerHTML=Array.from("10110110",(bit,i)=>'<span class="bit '+(i>=8-depth?"selected":"")+'">'+bit+"</span>").join("");
   $("bit-explanation").textContent=depth+" lowest bit"+(depth===1?"":"s")+" replaced per value. Example: 100 available values × "+depth+" = "+(100*depth)+" bits. A 240-bit package "+(100*depth>=240?"fits.":"does not fit.");
-  $("scope-note").textContent="Stable-cover hashing excludes these low bits. Start-location derivation uses SHA-256 regardless of the content-hash selection."+ (depth===8&&kindOf($("cover-file").files[0])!=="audio"?" At 8 LSBs, no image-channel value bits remain protected by the stable hash.":"");
+  $("scope-note").textContent="Stable-cover hashing excludes these low bits. Start-location derivation uses SHA-256 regardless of the content-hash selection."+ (depth===8&&kindOf($("cover-file").files[0])==="image"?" At 8 LSBs, no image-channel value bits remain protected by the stable hash.":"");
 }
-function updateContent() {
-  const cover=kindOf($("cover-file").files[0]) || "image";
-  const old=$("payload-type").value;
-  const other=cover==="image"?"audio":"image";
-  $("payload-type").replaceChildren(new Option("Text message","text"),new Option(other==="audio"?"Audio file inside image":"Image file inside audio",other));
-  if(old===other)$("payload-type").value=old;
-  updatePayloadMode(); updateBits();
+// Any cover can carry any of these; the payload type is inferred from the
+// dropped file rather than chosen from a separate dropdown. "file" is a text
+// document. Keep in sync with CONTENT_MIME_TYPES in backend/app.py.
+const CONTENT_EXTENSIONS = {
+  file: ["txt","md","csv","json"],
+  image: ["png","jpg","jpeg","webp","gif","bmp","tif","tiff"],
+  audio: ["wav","mp3","ogg","flac","m4a","aac","aif","aiff"],
+  video: ["mp4","m4v","mkv","mov","webm","avi"],
+};
+function contentKind(file) {
+  const ext=(file?.name.match(/\.([^.]+)$/)||[])[1]?.toLowerCase();
+  return Object.keys(CONTENT_EXTENSIONS).find(kind=>CONTENT_EXTENSIONS[kind].includes(ext)) || null;
 }
+function updateContent() { updatePayloadMode(); updateBits(); }
 function updatePayloadMode() {
-  const text=$("payload-type").value==="text";
+  const text=state.payloadMode!=="file";
   $("text-content").hidden=!text; $("file-content").hidden=text; $("payload-preview").hidden=text;
   $("payload-text").required=text; $("payload-file").required=!text;
-  $("payload-file").accept=$("payload-type").value==="audio"?"audio/*":"image/png,image/jpeg,image/webp";
 }
+document.querySelectorAll("#payload-mode-tabs .tab").forEach(btn=>btn.addEventListener("click",()=>{
+  state.payloadMode=btn.dataset.mode;
+  document.querySelectorAll("#payload-mode-tabs .tab").forEach(b=>{const active=b===btn;b.classList.toggle("active",active);b.setAttribute("aria-selected",String(active));});
+  updatePayloadMode(); invalidate();
+}));
 function updateStart(prefix="") {
   const mode=$(prefix?"verify-mode":"start-mode").value;
   $(prefix?"verify-offset-field":"offset-field").hidden=mode!=="manual";
@@ -111,11 +162,17 @@ function updateStart(prefix="") {
 }
 $("cover-file").addEventListener("change",run(async()=>{
   const file=$("cover-file").files[0];
-  if(file&&!kindOf(file))throw new Error("Choose a PNG image or WAV audio cover.");
-  updateContent(); await preview("cover-preview",file);
+  if(file&&!kindOf(file))throw new Error("Choose an image (PNG, JPEG, WebP, BMP, TIFF), audio (WAV, MP3, FLAC, OGG, M4A, AAC, AIFF) or video (MP4, MKV, MOV, WebM, AVI) cover.");
+  updateContent(); await preview("cover-preview",file,undefined,false);
 }));
-$("payload-type").addEventListener("change",updatePayloadMode);
-$("payload-file").addEventListener("change",()=>preview("payload-preview",$("payload-file").files[0]));
+$("payload-file").addEventListener("change",run(async()=>{
+  const file=$("payload-file").files[0];
+  if(file&&!contentKind(file)) {
+    $("payload-file").value=""; dropzones.payload.refresh(); await preview("payload-preview");
+    throw new Error("Choose a text, image, audio or video file to hide.");
+  }
+  await preview("payload-preview",file,undefined,false);
+}));
 $("lsb").addEventListener("change",updateBits);
 $("start-mode").addEventListener("change",()=>updateStart());
 $("verify-mode").addEventListener("change",()=>updateStart("verify"));
@@ -124,13 +181,18 @@ $("long-text").onclick=()=>{ $("payload-text").value="This undergraduate project
 function protectData() {
   const form=new FormData($("protect-form"));
   const kind=kindOf($("cover-file").files[0]);
-  if(!kind) throw new Error("Choose a PNG or WAV cover.");
+  if(!kind) throw new Error("Choose a PNG, WAV or video cover.");
   form.set("cover_type",kind);
+  if(state.payloadMode==="file") {
+    const kind=contentKind($("payload-file").files[0]);
+    if(!kind) throw new Error("Choose a text, image, audio or video file to hide.");
+    form.set("payload_type",kind);
+  } else form.set("payload_type","text");
   if($("start-mode").value==="manual") form.delete("passphrase");
   else form.delete("manual_offset");
   return form;
 }
-function ready() { return $("cover-file").files[0] && selectedKey() && ($("payload-type").value==="text"?$("payload-text").value:$("payload-file").files[0]) && ($("start-mode").value!=="passphrase"||$("secret").value); }
+function ready() { return $("cover-file").files[0] && selectedKey() && (state.payloadMode!=="file"?$("payload-text").value:$("payload-file").files[0]) && ($("start-mode").value!=="passphrase"||$("secret").value); }
 let reviewTimer;
 function invalidate() {
   state.revision++; state.prepared=null; $("protect-button").disabled=true;
@@ -159,7 +221,7 @@ async function prepare() {
 $("review").onclick=run(prepare);
 $("protect-form").onsubmit=run(async e=>{
   e.preventDefault(); if(!state.prepared?.fits)throw new Error("Review capacity before creating the stego file.");
-  const data=protectData(), cover=$("cover-file").files[0], content=$("payload-type").value==="text"?new File([$("payload-text").value],"message.txt",{type:"text/plain"}):$("payload-file").files[0];
+  const data=protectData(), cover=$("cover-file").files[0], content=state.payloadMode!=="file"?new File([$("payload-text").value],"message.txt",{type:"text/plain"}):$("payload-file").files[0];
   const settings={num_lsb:$("lsb").value,start_mode:$("start-mode").value,manual_offset:$("offset").value,passphrase:$("secret").value,cover_type:kindOf(cover)};
   state.busy=true; $("protect-button").disabled=true; $("prepare-status").textContent="Hashing, signing and embedding…";
   try {
@@ -169,7 +231,6 @@ $("protect-form").onsubmit=run(async e=>{
     $("created").hidden=false; await preview("stego-preview",file);
     $("created-info").textContent=bytes(result.container_size_bytes)+" signed package · "+result.num_lsb+" LSBs · "+result.metadata.hash_algorithm+" · Start "+result.start_index;
     $("final-record").textContent=pretty({record:result.metadata,payload_hash:result.payload_hash_hex,signature:result.signature_hex});
-    $("analyse-created").disabled=settings.cover_type!=="image";
     $("prepare-status").textContent="Stego file created. Review or download the output below.";
     notice("Created the stego object. Alice's private key was used for signing only.");
     setLatestPair();
@@ -179,10 +240,10 @@ $("download-stego").onclick=()=>{if(state.latest)download(state.latest.file,stat
 function useForVerify(file) {
   if(!state.latest)throw new Error("Protect a file first.");
   state.received=file||state.latest.file; $("received-file").required=false;
-  $("received-file").value=""; const settings=state.latest.settings;
+  $("received-file").value=""; dropzones.received.refresh(state.received); const settings=state.latest.settings;
   $("verify-lsb").value=settings.num_lsb; $("verify-mode").value=settings.start_mode;
   $("verify-offset").value=settings.manual_offset; $("verify-secret").value=settings.passphrase;
-  updateStart("verify"); preview("received-preview",state.received); invalidateVerification();
+  updateStart("verify"); preview("received-preview",state.received,undefined,false); invalidateVerification();
   location.hash="verify";
   notice("Local demo file loaded. Select Alice's trusted public key, then verify.");
 }
@@ -191,7 +252,7 @@ $("verify-form").addEventListener("input",invalidateVerification);
 $("verify-form").addEventListener("change",invalidateVerification);
 $("use-for-verify").onclick=run(()=>useForVerify());
 $("restore-stego").onclick=run(()=>{useForVerify(); $("tamper-status").textContent="Restored the original stego output.";});
-$("received-file").addEventListener("change",()=>{state.received=$("received-file").files[0]; preview("received-preview",state.received); $("verdict-card").hidden=true;});
+$("received-file").addEventListener("change",()=>{state.received=$("received-file").files[0]; preview("received-preview",state.received,undefined,false); $("verdict-card").hidden=true;});
 $("use-public").onclick=()=>{const key=selectedKey();if(key){$("verify-public").value=key.public_key_pem;invalidateVerification();notice("Selected demo public key loaded: "+key.fingerprint.slice(0,16)+"…");}};
 $("public-file").onchange=run(async()=>{if($("public-file").files[0]){$("verify-public").value=await $("public-file").files[0].text();invalidateVerification();}});
 $("decoy-public").onclick=run(async()=>{$("verify-public").value=(await api("/api/keys/decoy",new FormData())).public_key_pem;invalidateVerification();notice("Wrong public key loaded for a negative verification case.");});
@@ -213,8 +274,8 @@ function renderVerdict(result) {
   } else {state.recovered=null; $("recovered-preview").textContent="Recovered content unavailable: extraction or verification could not complete.";}
 }
 $("verify-form").onsubmit=run(async e=>{
-  e.preventDefault(); if(!state.received)throw new Error("Choose a received PNG or WAV file.");
-  const kind=kindOf(state.received); if(!kind)throw new Error("Choose a PNG or WAV.");
+  e.preventDefault(); if(!state.received)throw new Error("Choose a received PNG, WAV or video file.");
+  const kind=kindOf(state.received); if(!kind)throw new Error("Choose a PNG, WAV or video file.");
   const data=new FormData(); data.append("stego_file",state.received); data.append("cover_type",kind);
   data.append("num_lsb",$("verify-lsb").value); data.append("start_mode",$("verify-mode").value);
   data.append("manual_offset",$("verify-offset").value); data.append("passphrase",$("verify-secret").value);
@@ -251,13 +312,13 @@ async function renderComparison() {
   $("comparison-results").hidden=!state.pair.measurements;
   if(state.pair.measurements)drawComparison(state.pair.measurements);
 }
-$("compare-latest").onclick=run(async()=>{if(!state.latest)throw new Error("Protect a file first.");setLatestPair();$("compare-original").value="";$("compare-stego").value="";await renderComparison();await compare();});
+$("compare-latest").onclick=run(async()=>{if(!state.latest)throw new Error("Protect a file first.");setLatestPair();$("compare-original").value="";$("compare-stego").value="";dropzones.compareOriginal.refresh(state.pair.before);dropzones.compareStego.refresh(state.pair.after);await renderComparison();await compare();});
 $("compare-original").onchange=()=>{state.pair={before:$("compare-original").files[0],after:$("compare-stego").files[0],content:null};renderComparison();};
 $("compare-stego").onchange=$("compare-original").onchange;
 async function compare() {
   if(!state.pair?.before||!state.pair?.after)throw new Error("Choose both the original and stego object, or load the last protected pair.");
   const pair=state.pair, kind=kindOf(pair.before);
-  if(!kind||kind!==kindOf(pair.after))throw new Error("Both objects must be PNGs, or both WAVs.");
+  if(!kind||kind!==kindOf(pair.after))throw new Error("Both objects must be the same media type (PNG, WAV or video).");
   const data=new FormData();data.append("cover_type",kind);data.append("original_file",pair.before);data.append("stego_file",pair.after);
   $("compare-button").disabled=true; $("compare-status").textContent="Measuring changes…";
   try {pair.measurements=await api("/api/compare",data);if(state.pair!==pair)return;await renderComparison();$("compare-status").textContent=fileLabel(pair.before)+" → "+fileLabel(pair.after);}
@@ -312,30 +373,82 @@ function renderDifferenceView() {
 }
 $("difference-view").onchange=renderDifferenceView;
 
-$("analysis-file").onchange=()=>{state.analysisFile=$("analysis-file").files[0];state.analysisContext=null;preview("analysis-preview",state.analysisFile);clearAnalysis();};
-// Encoding context describes the file; it never feeds the blind classifier.
-function analysisSource() {
-  const file=state.analysisFile;
-  $("analysis-encoding").hidden=true;
-  if(!file){$("analysis-file-info").innerHTML='<p class="empty">Select a PNG, or use “Analyse stego PNG” after protecting a file.</p>';return;}
-  $("analysis-file-info").innerHTML=detailsTable([["Source",state.analysisContext?"Encoder output":"Manual upload"],["File",fileLabel(file)]]);
+function setAnalysisFile(file) {
+  state.analysisFile=file; dropzones.analysis.refresh(file);
+  $("window-field").hidden=!!file&&kindOf(file)!=="image";
+  preview("analysis-preview",file,undefined,false); clearAnalysis();
 }
+$("analysis-file").onchange=run(()=>{
+  const file=$("analysis-file").files[0];
+  if(file&&!kindOf(file)) { $("analysis-file").value=""; setAnalysisFile(undefined); throw new Error("Choose a PNG, WAV or video file to analyse."); }
+  setAnalysisFile(file);
+});
 function clearAnalysis() {
   state.analysisRevision++;
   state.analysis=null;$("analysis-export").disabled=true;
-  for(const id of ["chi-results","rs-results","window-results"])$(id).textContent="Run analysis to see measurements.";
+  $("chi-results").textContent="Run analysis to see measurements.";$("rs-results").textContent="Run analysis to see measurements.";
+  $("spa-results").replaceChildren();$("spa-chart").replaceChildren();$("spa-channels").replaceChildren();
+  $("audio-analysis").hidden=true;$("image-analysis").hidden=false;$("likelihood-card").hidden=true;
   $("analysis-conclusion").textContent="No current results.";$("analysis-data").textContent="No report yet.";
-  analysisSource();
 }
 $("window-size").addEventListener("input",clearAnalysis);
 $("analyse-created").onclick=run(()=>{
-  if(!state.latest||state.latest.settings.cover_type!=="image")throw new Error("Protect a PNG first.");
-  // Allowlist non-secret explanatory settings; no payloads, keys or passwords.
-  const r=state.latest.result;
-  state.analysisContext={num_lsb:r.num_lsb,start_unit:r.start_index,container_bytes:r.container_size_bytes,capacity_bytes:r.capacity_bytes};
-  state.analysisFile=state.latest.file;$("analysis-file").value="";$("analysis-file").required=false;
-  preview("analysis-preview",state.analysisFile);clearAnalysis();location.hash="analysis";
+  if(!state.latest)throw new Error("Protect a file first.");
+  $("analysis-file").value=""; setAnalysisFile(state.latest.file); location.hash="analysis";
 });
+const fmt=v=>v==null?"Insufficient data":Number(v).toPrecision(5);
+// Tail scores can be far below 0.0001 or underflow to 0; keep them readable.
+const tail=v=>v==null||!Number.isFinite(v)?"Insufficient data":v===0?"Below numerical precision (0)":v<0.0001?v.toExponential(4):v.toFixed(5);
+function renderImageAnalysis(job) {
+  const thresholds=job.combined.thresholds, channels=Object.entries(job.channels);
+  const indication=(score,threshold)=>score==null?"Insufficient data":score>=threshold?"Indicators detected":"No strong indicators";
+  const windows=[];
+  for(const [name,c] of channels) c.windows.forEach((w,i)=>windows.push([name,i+1,w.start+"–"+w.stop,w.sample_count,fmt(w.statistic)+" / "+w.degrees_of_freedom,tail(w.score),w.score==null?"Insufficient data":w.score>=thresholds.chi_square?"At/above threshold":"Below threshold"]));
+  $("chi-results").innerHTML=detailsTable([["Summary tail score",tail(job.scores.chi_square)],["Threshold (provisional)",thresholds.chi_square],["Interpretation",indication(job.scores.chi_square,thresholds.chi_square)]])
+    +table(["Channel","χ²","df","Whole-channel tail","Window median tail","Channel summary"],channels.map(([name,c])=>[name,fmt(c.chi_square.statistic),c.chi_square.degrees_of_freedom,tail(c.chi_square.score),tail(c.chi_square_regional_median_score),tail(c.chi_square_summary_score)]))
+    +'<details><summary>Window results (requested size '+esc(job.configuration.requested_window_size)+')</summary><div class="table-wrap analysis-windows">'+table(["Channel","Window","Start–end","Values","Statistic / df","Tail score","Observation"],windows)+"</div></details>";
+  $("rs-results").innerHTML=detailsTable([["Estimated LSB-replacement fraction",fmt(job.scores.rs)],["Threshold (provisional)",thresholds.rs],["Interpretation",indication(job.scores.rs,thresholds.rs)],["Masks","[0,1,1,0] / [0,-1,-1,0]"]])
+    +table(["Channel","Groups","+mask R / S / U","Inverse R / S / U","Estimated fraction"],channels.map(([name,c])=>[name,c.rs.groups,c.rs.positive.regular+" / "+c.rs.positive.singular+" / "+c.rs.positive.unusable,c.rs.negative.regular+" / "+c.rs.negative.singular+" / "+c.rs.negative.unusable,fmt(c.rs.score)]));
+  $("analysis-conclusion").textContent=({"High indication":"Indicators detected: at least one method crossed its threshold. This is compatible with LSB replacement, not proof of hidden data.","Low indication":"No strong indicators: both methods are below their thresholds. This does not establish absence of hidden data.","Inconclusive":"Inconclusive: neither method crossed its threshold and at least one had insufficient data."})[job.combined.category];
+  return job.image.width+" × "+job.image.height+" · "+job.image.mode;
+}
+const percent=v=>v==null?"Insufficient data":(100*v).toFixed(1)+"%";
+function renderAudioAnalysis(job) {
+  $("image-analysis").hidden=true;$("audio-analysis").hidden=false;
+  const spa=job.spa, limits=job.combined.thresholds;
+  $("spa-results").innerHTML=detailsTable([
+    ["Estimated share of samples carrying hidden bits",percent(spa.estimate)],
+    ["95% interval",spa.ci95?percent(spa.ci95[0])+" to "+percent(spa.ci95[1]):"Insufficient data"],
+    ["Rough hidden size at 1 LSB",job.estimated_hidden_bytes_at_1_lsb==null?"Insufficient data":bytes(job.estimated_hidden_bytes_at_1_lsb)],
+    ["Sample pairs analysed",spa.pairs_analysed],
+    ["Decision limits (provisional)","standard error ≤ "+limits.max_standard_error+"; interval above "+percent(limits.min_rate)]]);
+  // Clip only for display: short segments can give estimates outside 0-100%.
+  const values=job.segments.map(s=>s.estimate==null?0:Math.max(-0.25,Math.min(1.25,s.estimate)));
+  chart($("spa-chart"),"Estimated share over time ("+job.segments.length+" segments)",[{values}],"Time 0 → "+job.media.duration_seconds+" s · 1 = every sample carries hidden bits",1.25,-0.25);
+  $("spa-channels").innerHTML=table(["Channel","Estimate","Standard error","Pairs analysed"],job.channels.map(c=>[c.channel,percent(c.estimate),fmt(c.standard_error),c.pairs_analysed]));
+  $("analysis-conclusion").textContent=({"High indication":"Indicators detected: about "+percent(spa.estimate)+" of samples appear to carry replaced lowest bits.","Low indication":"No strong indicators: the estimate stays below the minimum share. This does not establish absence of hidden data.","Inconclusive":"Inconclusive: too few neighbouring samples are close in value to estimate reliably (typical of loud, noisy or 32-bit audio)."})[job.combined.category];
+  const m=job.media;
+  return (m.kind==="video"?"video audio track · ":"")+m.duration_seconds+" s · "+m.sample_rate_hz+" Hz · "+m.channels+" ch · "+m.sample_width_bits+"-bit";
+}
+const chance=p=>p<0.01?"Under 1%":p>0.99?"Over 99%":Math.round(100*p)+"%";
+const whole=p=>Math.round(100*p)+"%";
+function renderLikelihood(job) {
+  const like=job.likelihood, spa=job.spa;
+  if(!like)return;
+  $("likelihood-card").hidden=false;
+  const known=like.probability!=null;
+  $("likelihood-value").textContent=known?chance(like.probability):"Unknown";
+  $("likelihood-band").textContent=like.band; $("likelihood-band").dataset.band=like.band;
+  $("likelihood-fill").style.width=known?(100*like.probability).toFixed(1)+"%":"0";
+  $("likelihood-bar").setAttribute("aria-label",known?"Likelihood "+chance(like.probability):"Likelihood unknown");
+  const unit=job.method==="sample_pair_analysis"?"samples":"colour values";
+  $("likelihood-text").textContent=!known?"There was not enough evidence to estimate how much of this file carries hidden bits."
+    :"Sample-pair analysis estimates that "+percent(Math.max(0,spa.estimate))+" of "+unit+" carry replaced lowest bits (95% interval "+percent(spa.ci95[0])+" to "+percent(spa.ci95[1])+")."
+     +(like.band==="Uncertain"?" The evidence does not clearly separate a clean file from one with a small payload.":"");
+  $("likelihood-assumptions").textContent="How this is worked out: starting from a "+whole(like.prior)+" chance, hidden data would occupy "
+    +whole(like.assumed_share_range[0])+"–"+whole(like.assumed_share_range[1])+" of "+unit+", and clean files are allowed a natural bias of ±"
+    +(100*like.cover_bias_sd).toFixed(1)+" percentage points. These assumptions are provisional and not calibrated on real-world files; short messages are often missed.";
+}
 // WebCrypto exists only in secure contexts (HTTPS or localhost); elsewhere the
 // local hash comparison is skipped and reported rather than blocking analysis.
 async function sha256Hex(file) {
@@ -343,49 +456,11 @@ async function sha256Hex(file) {
   const digest=await crypto.subtle.digest("SHA-256",await file.arrayBuffer());
   return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");
 }
-function renderAnalysis(job) {
-  const fmt=(v,tail=false)=>{
-    if(v==null||!Number.isFinite(v))return "Insufficient data";
-    if(tail&&v===0)return "Below numerical precision (returned 0)";
-    return v>0&&v<0.0001?v.toExponential(4):Number(v).toFixed(5);
-  };
-  const counts=c=>c.regular+" / "+c.singular+" / "+c.unusable;
-  const thresholds=job.combined.thresholds;
-  const indication=(score,threshold)=>score==null?"Insufficient data":score>=threshold?"Indicators detected":"No strong indicators";
-  const channels=Object.entries(job.channels);
-  $("analysis-file-info").innerHTML=detailsTable([["Source",job.input.encoding_context?"Encoder output":"Manual upload"],["File",job.input.filename+" · "+bytes(job.input.byte_length)],["Image",job.image.width+" × "+job.image.height+" · "+job.image.mode],["SHA-256 of analysed PNG",job.file_sha256]]);
-  const context=job.input.encoding_context;
-  $("analysis-encoding").hidden=!context;
-  if(context) {
-    const usage=context.capacity_bytes>0?(100*context.container_bytes/context.capacity_bytes).toFixed(2)+"%":"Unavailable";
-    $("analysis-encoding-details").innerHTML=detailsTable([["LSB depth",context.num_lsb],["Start",context.start_unit+" carrier units"],["Signed container",bytes(context.container_bytes)],["Capacity from start",bytes(context.capacity_bytes)],["Capacity used",usage]]);
-  }
-  const chiNote=job.scores.chi_square==null?"Insufficient data for the chi-square summary score."
-    :job.scores.chi_square<thresholds.chi_square?"Weak chi-square evidence of pair equalisation. Hidden data may still be present, especially when payload bits are structured rather than approximately balanced."
-    :"Value-pair equalisation is compatible with LSB replacement; other causes are possible.";
-  $("chi-results").innerHTML=detailsTable([["Summary tail score",fmt(job.scores.chi_square,true)],["Threshold (provisional)",thresholds.chi_square],["Interpretation",indication(job.scores.chi_square,thresholds.chi_square)],["Note",chiNote]])
-    +'<div class="table-wrap">'+table(["Channel","χ²","df","Whole-channel tail","Window median tail","Channel summary"],channels.map(([name,c])=>[name,fmt(c.chi_square.statistic),c.chi_square.degrees_of_freedom,fmt(c.chi_square.score,true),fmt(c.chi_square_regional_median_score,true),fmt(c.chi_square_summary_score,true)]))+"</div>";
-  $("rs-results").innerHTML=detailsTable([["Estimated LSB-replacement fraction",fmt(job.scores.rs)],["Threshold (provisional)",thresholds.rs],["Interpretation",indication(job.scores.rs,thresholds.rs)],["Masks","[0,1,1,0] / [0,-1,-1,0]"]])
-    +'<div class="table-wrap">'+table(["Channel","Groups","+mask R / S / U","Inverse R / S / U","Estimated fraction"],channels.map(([name,c])=>[name,c.rs.groups,counts(c.rs.positive),counts(c.rs.negative),fmt(c.rs.score)]))+"</div>";
-  const summaries=[], rows=[];
-  for(const [name,c] of channels) {
-    const valid=c.windows.filter(w=>w.score!=null);
-    const high=valid.filter(w=>w.score>=thresholds.chi_square).length;
-    const peak=valid.length?Math.max(...valid.map(w=>w.score)):null;
-    summaries.push([name,c.windows.length+" windows of "+c.effective_window_size+" values · "+valid.length+" usable · "+high+" at/above threshold · peak "+fmt(peak,true)]);
-    c.windows.forEach((w,i)=>rows.push([name,i+1,w.start+"–"+w.stop,w.sample_count,fmt(w.statistic)+" / "+w.degrees_of_freedom,fmt(w.score,true),w.score==null?"Insufficient data":w.score>=thresholds.chi_square?"At/above threshold":"Below threshold"]));
-  }
-  $("window-results").innerHTML=detailsTable([["Requested window size",job.configuration.requested_window_size+" (may increase to limit each channel to 128 windows)"],...summaries])
-    +'<details><summary>All windows</summary><div class="table-wrap analysis-windows">'+table(["Channel","Window","Start–end","Values","Statistic / df","Tail score","Observation"],rows)+"</div></details>";
-  $("analysis-conclusion").textContent=({"High indication":"High indication: at least one method crossed its threshold. This is statistical evidence compatible with LSB replacement, not proof of hidden data.","Low indication":"Low indication: both methods are below their thresholds. This does not establish absence of hidden data.","Inconclusive":"Inconclusive: neither method crossed its threshold and at least one had insufficient data."})[job.combined.category];
-  $("analysis-limitations").replaceChildren(...job.limitations.map(text=>{const li=document.createElement("li");li.textContent=text;return li;}));
-  $("analysis-data").textContent=pretty(job);
-}
 $("analysis-form").onsubmit=run(async e=>{
-  e.preventDefault();if(!state.analysisFile)throw new Error("Choose a PNG to analyse.");
-  if(state.analysisFile.size>32*1024*1024)throw new Error("Analysis supports PNG files up to 32 MiB.");
-  const file=state.analysisFile, context=state.analysisContext?{...state.analysisContext}:null, data=new FormData();data.append("image_file",file);data.append("window_size",$("window-size").value);
-  clearAnalysis();const revision=state.analysisRevision;$("analysis-button").disabled=true;$("analysis-status").textContent="Analysing exact PNG bytes…";
+  e.preventDefault();if(!state.analysisFile)throw new Error("Choose a PNG, WAV or video file to analyse.");
+  const file=state.analysisFile, data=new FormData();data.append("media_file",file);data.append("window_size",$("window-size").value);
+  clearAnalysis();const revision=state.analysisRevision;$("analysis-button").disabled=true;
+  $("analysis-status").textContent=kindOf(file)==="image"?"Analysing image channels…":"Analysing consecutive audio samples…";
   try {
     const expectedHash=await sha256Hex(file);
     let job=await api("/api/analyse?mode=async",data);
@@ -397,15 +472,15 @@ $("analysis-form").onsubmit=run(async e=>{
       job=progress.result;
     }
     if(file!==state.analysisFile||revision!==state.analysisRevision)return;
-    if(expectedHash&&job.file_sha256!==expectedHash)throw new Error("Analysed file hash did not match the selected PNG. No result displayed.");
-    job.input={filename:file.name,byte_length:file.size,source:context?"encoder_output":"manual_upload",sha256_matches_selected_file:expectedHash?true:null,
-      encoding_context:context,context_origin:context?"Browser snapshot of encoder response; not inferred or independently verified":null};
-    renderAnalysis(job);
+    if(expectedHash&&job.file_sha256!==expectedHash)throw new Error("Analysed file hash did not match the selected file. No result displayed.");
     state.analysis=job;$("analysis-export").disabled=false;
-    $("analysis-status").textContent="Completed · "+(expectedHash?"file match verified":"file match not checked (WebCrypto unavailable)")+" · "+fileLabel(file)+" · "+job.image.width+" × "+job.image.height+" · "+job.image.mode;
+    const summary=job.method==="sample_pair_analysis"?renderAudioAnalysis(job):renderImageAnalysis(job);
+    renderLikelihood(job);
+    $("analysis-limitations").replaceChildren(...job.limitations.map(text=>{const li=document.createElement("li");li.textContent=text;return li;}));
+    $("analysis-data").textContent=pretty(job);$("analysis-status").textContent="Completed · "+(expectedHash?"file match verified":"file match not checked (WebCrypto unavailable)")+" · "+fileLabel(file)+" · "+summary;
   } catch(error){$("analysis-status").textContent=error.message;throw error;}
   finally{$("analysis-button").disabled=false;}
 });
 $("analysis-export").onclick=()=>{if(state.analysis)exportJSON(state.analysis,"steganalysis-report.json");};
-updateBits();updateStart();updateStart("verify");
+updatePayloadMode();updateBits();updateStart();updateStart("verify");
 loadKeys().catch(error=>notice("Could not load Alice's keys: "+error.message,true));

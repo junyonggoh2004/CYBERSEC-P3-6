@@ -1,0 +1,10 @@
+StegaSure sample message 12
+Hash the recovered payload and compare its signed digest.
+Verify the signer with a public key received through a trusted channel.
+Derived start locations require the same private seed at extraction.
+Hash the recovered payload and compare its signed digest.
+Verify the signer with a public key received through a trusted channel.
+Derived start locations require the same private seed at extraction.
+Hash the recovered payload and compare its signed digest.
+Verify the signer with a public key received through a trusted channel.
+Derived start locations require the same private seed at extraction.

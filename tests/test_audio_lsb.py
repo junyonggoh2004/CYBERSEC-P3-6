@@ -165,7 +165,6 @@ BAD_WAVS = {
     "32-bit float": (_riff(_fmt(3, 1, 44100, 32), np.zeros(10, dtype=np.float32).tobytes()), "float WAV isn't supported"),
     "extensible float": (_extensible_float_wav(), _EXTENSIBLE_FLOAT_MESSAGE),
     "mu-law": (_riff(_fmt(7, 1, 8000, 8), b"\x7f" * 10), "compressed or non-PCM"),
-    "24-bit PCM": (_wav_bytes(np.zeros(30, dtype=np.uint8), width=3), "24-bit PCM. Supported: 16-bit and 32-bit PCM"),
     "8-bit PCM": (_wav_bytes(np.zeros(10, dtype=np.uint8), width=1), "8-bit PCM WAV is not supported"),
     "cut mid-sample": (_wav_bytes(np.arange(100, dtype=np.int16))[:-1], "truncated or damaged"),
     "no samples": (_wav_bytes(np.zeros(0, dtype=np.int16)), "no audio samples"),
@@ -179,6 +178,16 @@ def test_bad_wav_is_rejected_with_a_clear_message(name):
         audio_lsb.load_audio_carrier(data)
 
 
+def test_24_bit_pcm_loads_signed_and_round_trips():
+    samples = np.array([0, 1, -1, 0x7FFFFF, -0x800000], dtype=np.int32)
+    packed = np.column_stack([(samples >> shift) & 255 for shift in (0, 8, 16)]).astype(np.uint8)
+    carrier = audio_lsb.load_audio_carrier(_wav_bytes(packed.ravel(), width=3))
+    assert carrier.sampwidth == 3
+    assert carrier.array.tolist() == samples.tolist()
+    again = audio_lsb.load_audio_carrier(audio_lsb.carrier_to_wav_bytes(carrier))
+    assert again.array.tolist() == samples.tolist()
+
+
 def test_header_overstating_its_length_counts_the_real_frames():
     # A download cut at a frame boundary: the header still claims 1000 frames.
     data = _wav_bytes(np.arange(1000, dtype=np.int16))[:-2]
@@ -187,7 +196,7 @@ def test_header_overstating_its_length_counts_the_real_frames():
     assert audio_lsb.describe(carrier)["frames"] == carrier.array.size == 999
 
 
-@pytest.mark.parametrize("name", ["not a WAV", "32-bit float"])
+@pytest.mark.parametrize("name", ["not a WAV"])
 def test_bad_wav_in_the_app_is_a_clear_400_not_a_server_error(name):
     data, message = BAD_WAVS[name]
     response = app.test_client().post(
@@ -202,3 +211,19 @@ def test_bad_wav_in_the_app_is_a_clear_400_not_a_server_error(name):
     assert response.status_code == 400
     assert message in response.get_json()["error"]
     assert "Unexpected server error" not in response.get_json()["error"]
+
+
+@pytest.mark.parametrize("name", ["32-bit float", "extensible float"])
+def test_float_wav_in_the_app_is_converted_to_pcm(name):
+    # The loader rejects float samples, but the app converts them to PCM first.
+    data, _ = BAD_WAVS[name]
+    response = app.test_client().post(
+        "/api/prepare",
+        data={
+            "cover_type": "audio", "num_lsb": "1", "start_mode": "manual", "manual_offset": "0",
+            "payload_type": "text", "payload_text": "hi",
+            "cover_file": (io.BytesIO(data), "cover.wav"),
+        },
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200, response.get_json()

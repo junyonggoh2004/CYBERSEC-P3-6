@@ -13,9 +13,14 @@ import numpy as np
 from PIL import Image, UnidentifiedImageError
 from scipy.stats import chi2
 
+from . import spa
+
 VERSION = "kim-sa-2"
-MAX_PIXELS = 8_000_000
-MAX_FILE_BYTES = 32 * 1024 * 1024
+# Large enough for photos Protect can produce; RS and SPA count in row blocks
+# so memory stays bounded.
+MAX_PIXELS = 50_000_000
+MAX_FILE_BYTES = 200 * 1024 * 1024
+ROW_BLOCK = 512
 DEFAULT_THRESHOLDS = {"chi_square": 0.95, "rs": 0.05}
 LIMITATIONS = [
     "Statistical indication is not proof of hidden data, authenticity, or tampering.",
@@ -164,18 +169,23 @@ def rs_analysis(channel: np.ndarray) -> dict:
         raise ValueError("RS expects a two-dimensional colour channel.")
     height, width = channel.shape
     usable_width = width // 4 * 4
-    groups = channel[:, :usable_width].reshape(-1, 4)
-    n = len(groups)
-
-    positive = rs_counts(groups)
-    negative = rs_counts(groups, (0, -1, -1, 0))
+    n = height * (width // 4)
 
     # The RS estimator also requires the measurements at 1 - p/2, obtained by
     # flipping every LSB in the observed stego image before repeating R/S counts.
-    flipped_channel = channel ^ np.uint8(1)
-    flipped_groups = flipped_channel[:, :usable_width].reshape(-1, 4)
-    flipped_positive = rs_counts(flipped_groups)
-    flipped_negative = rs_counts(flipped_groups, (0, -1, -1, 0))
+    # Counts add up across rows, so count a block of rows at a time.
+    totals = [{"regular": 0, "singular": 0, "unusable": 0} for _ in range(4)]
+    for top in range(0, height, ROW_BLOCK):
+        block = channel[top:top + ROW_BLOCK, :usable_width]
+        if not block.size:
+            continue
+        groups = block.reshape(-1, 4)
+        flipped_groups = (block ^ np.uint8(1)).reshape(-1, 4)
+        for total, (source, mask) in zip(totals, ((groups, (0, 1, 1, 0)), (groups, (0, -1, -1, 0)),
+                                                  (flipped_groups, (0, 1, 1, 0)), (flipped_groups, (0, -1, -1, 0)))):
+            for key, value in rs_counts(source, mask).items():
+                total[key] += value
+    positive, negative, flipped_positive, flipped_negative = totals
 
     raw_estimate, quadratic, differences = _rs_message_fraction(
         positive, negative, flipped_positive, flipped_negative
@@ -257,13 +267,13 @@ def analyse_png(file_bytes: bytes, window_size: int = 65536, thresholds=None) ->
     if not isinstance(window_size, int) or not 256 <= window_size <= 1_000_000:
         raise ValueError("Window size must be 256-1000000 channel values.")
     if not file_bytes or len(file_bytes) > MAX_FILE_BYTES:
-        raise ValueError("Upload a nonempty PNG of at most 32 MiB.")
+        raise ValueError(f"Upload a nonempty PNG of at most {MAX_FILE_BYTES // (1024 * 1024)} MiB.")
     try:
         with Image.open(io.BytesIO(file_bytes)) as img:
             if img.format != "PNG" or img.mode not in ("RGB", "RGBA", "L"):
                 raise ValueError("Use an 8-bit RGB, RGBA, or grayscale PNG.")
             if img.width * img.height > MAX_PIXELS:
-                raise ValueError("Analysis supports images up to 8 million pixels.")
+                raise ValueError(f"Analysis supports images up to {MAX_PIXELS // 1_000_000} million pixels.")
             if getattr(img, "n_frames", 1) != 1:
                 raise ValueError("Animated PNG is not supported for analysis.")
             mode = img.mode
@@ -288,11 +298,14 @@ def analyse_png(file_bytes: bytes, window_size: int = 65536, thresholds=None) ->
 
         full_chi = chi_square(flat)
         chi_summary, regional_median = _chi_channel_summary(full_chi, windows)
+        counts = spa.row_pair_counts(channel)
+        spa_counts = counts if not channels else spa_counts + counts
         channels[name] = {
             "chi_square": full_chi,
             "chi_square_summary_score": chi_summary,
             "chi_square_regional_median_score": regional_median,
             "rs": rs_analysis(channel),
+            "spa": spa.estimate(counts),
             "windows": windows,
             "effective_window_size": effective_window,
         }
@@ -309,6 +322,12 @@ def analyse_png(file_bytes: bytes, window_size: int = 65536, thresholds=None) ->
         "chi_square": float(np.median(chi_values)) if chi_values else None,
         "rs": float(np.median(rs_values)) if rs_values else None,
     }
+    # Sample-pair analysis over all colour planes: an estimated share of values
+    # carrying hidden bits, which also gives the likelihood of hidden data.
+    # It is reported alongside, and does not change, the chi-square/RS verdict.
+    overall = spa.estimate(spa_counts)
+    values = len(names) * arr.shape[0] * arr.shape[1]
+    hidden_bytes = None if overall["estimate"] is None else int(max(0.0, min(1.0, overall["estimate"])) * values / 8)
 
     return {
         "analysis_version": VERSION,
@@ -323,5 +342,8 @@ def analyse_png(file_bytes: bytes, window_size: int = 65536, thresholds=None) ->
         "scores": scores,
         "channels": channels,
         "combined": combine(scores["chi_square"], scores["rs"], thresholds),
+        "spa": overall,
+        "estimated_hidden_bytes_at_1_lsb": hidden_bytes,
+        "likelihood": spa.hidden_data_likelihood(overall["estimate"], overall["standard_error"], "image"),
         "limitations": list(LIMITATIONS),
     }

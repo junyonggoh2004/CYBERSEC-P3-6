@@ -1,16 +1,15 @@
 """
 Audio cover-object support (WAV/PCM, FR2/FR5/FR6/FR8).
 
-Supports 16-bit and 32-bit PCM WAV specifically (the "16bit and 32bit"
-requirement): the sample width is auto-detected from the WAV header (never
-hard-coded), each PCM sample becomes one carrier unit (int16 or int32), and
-LSB embedding/extraction reuses the exact same bitstream.py primitives as
-images. 8-bit PCM (unsigned) and other widths (e.g. 24-bit, float) are
-rejected with a clear error rather than silently corrupting the file.
+Supports 16-, 24- and 32-bit PCM WAV. The header determines sample width;
+packed 24-bit values are sign-extended to int32 in memory and written back
+as three bytes per sample. Each sample remains one carrier unit. Other
+input encodings are converted by media_input before embedding.
 """
 from __future__ import annotations
 
 import io
+import struct
 import wave
 from dataclasses import dataclass
 
@@ -19,6 +18,7 @@ import numpy as np
 _DTYPE_BY_SAMPWIDTH = {
     1: np.uint8,   # 8-bit PCM is unsigned in WAV
     2: np.int16,   # 16-bit PCM
+    3: np.int32,   # Packed 24-bit PCM is expanded to signed int32 in memory
     4: np.int32,   # 32-bit PCM
 }
 
@@ -27,7 +27,7 @@ _DTYPE_BY_SAMPWIDTH = {
 class AudioCarrier:
     array: np.ndarray  # 1-D, dtype depends on sample width, mutable
     nchannels: int
-    sampwidth: int  # bytes per sample: 1, 2 or 4
+    sampwidth: int  # bytes per sample: 2, 3 or 4
     framerate: int
     nframes: int
 
@@ -48,11 +48,11 @@ def _unreadable_wav_message(exc: Exception) -> str:
     if isinstance(exc, EOFError):
         return "This WAV file is empty or cut off before its audio data. Please use a complete WAV file."
     if "RIFF" in text or "not a WAVE file" in text:
-        return "This file is not a WAV file. Please choose a 16-bit or 32-bit PCM WAV."
+        return "This file is not a WAV file. Please choose a 16-, 24- or 32-bit PCM WAV."
     if text == f"unknown format: {_WAVE_FORMAT_FLOAT}" or _FLOAT_SUBFORMAT in text:
         return (
             "32-bit float WAV isn't supported: this tool hides data in whole-number (PCM) samples. "
-            "Please export it as 16-bit or 32-bit PCM WAV."
+            "Please export it as 16-, 24- or 32-bit PCM WAV."
         )
     if text == f"unknown format: {_WAVE_FORMAT_EXTENSIBLE}":
         # Only Python < 3.12: newer versions read extensible PCM headers.
@@ -61,11 +61,38 @@ def _unreadable_wav_message(exc: Exception) -> str:
             "(Python 3.12 or newer can). Please re-export it as a standard 16-bit PCM WAV."
         )
     if text.startswith(("unknown format", "unknown extended format")):
-        return "This WAV uses a compressed or non-PCM encoding. Please export it as 16-bit or 32-bit PCM WAV."
-    return f"Could not read this WAV file ({text}). Please use a 16-bit or 32-bit PCM WAV."
+        return "This WAV uses a compressed or non-PCM encoding. Please export it as 16-, 24- or 32-bit PCM WAV."
+    return f"Could not read this WAV file ({text}). Please use a 16-, 24- or 32-bit PCM WAV."
+
+
+# SubFormat GUID of an extensible-header WAV whose samples are plain integer PCM.
+_PCM_SUBFORMAT = bytes.fromhex("0100000000001000800000aa00389b71")
+
+
+def _extensible_pcm_as_plain(file_bytes: bytes) -> bytes:
+    """Relabel an extensible-header integer PCM WAV as a standard PCM WAV.
+
+    Python < 3.12 cannot read WAVE_FORMAT_EXTENSIBLE, which ffmpeg writes for
+    PCM wider than 16 bits (for example when media_input converts MP3 or float
+    WAV). The sample data is identical, so only the format tag changes. Other
+    files are returned unchanged."""
+    if file_bytes[:4] != b"RIFF" or file_bytes[8:12] != b"WAVE":
+        return file_bytes
+    pos = 12
+    while pos + 8 <= len(file_bytes):
+        chunk_id, size = file_bytes[pos:pos + 4], struct.unpack("<I", file_bytes[pos + 4:pos + 8])[0]
+        if chunk_id == b"fmt ":
+            body = file_bytes[pos + 8:pos + 8 + size]
+            if (size >= 40 and struct.unpack("<H", body[:2])[0] == _WAVE_FORMAT_EXTENSIBLE
+                    and body[24:40] == _PCM_SUBFORMAT):
+                return file_bytes[:pos + 8] + struct.pack("<H", 1) + file_bytes[pos + 10:]
+            return file_bytes
+        pos += 8 + size + (size & 1)
+    return file_bytes
 
 
 def load_audio_carrier(file_bytes: bytes) -> AudioCarrier:
+    file_bytes = _extensible_pcm_as_plain(file_bytes)
     try:
         with wave.open(io.BytesIO(file_bytes), "rb") as wf:
             nchannels = wf.getnchannels()
@@ -85,7 +112,7 @@ def load_audio_carrier(file_bytes: bytes) -> AudioCarrier:
     if sampwidth == 1:
         raise ValueError(
             "8-bit PCM WAV is not supported (too little headroom for reliable LSB embedding). "
-            "Please use 16-bit or 32-bit PCM WAV."
+            "Please use 16-, 24- or 32-bit PCM WAV."
         )
 
     frame_bytes = sampwidth * nchannels
@@ -100,8 +127,13 @@ def load_audio_carrier(file_bytes: bytes) -> AudioCarrier:
     if nframes == 0:
         raise ValueError("This WAV file contains no audio samples.")
 
-    dtype = _DTYPE_BY_SAMPWIDTH[sampwidth]
-    arr = np.frombuffer(raw, dtype=dtype).copy()
+    if sampwidth == 3:
+        packed = np.frombuffer(raw, dtype=np.uint8).reshape(-1, 3).astype(np.int32)
+        values = packed[:, 0] | (packed[:, 1] << 8) | (packed[:, 2] << 16)
+        arr = (values ^ 0x800000) - 0x800000
+    else:
+        dtype = np.dtype(_DTYPE_BY_SAMPWIDTH[sampwidth]).newbyteorder("<")
+        arr = np.frombuffer(raw, dtype=dtype).copy()
     return AudioCarrier(
         array=arr,
         nchannels=nchannels,
@@ -117,7 +149,11 @@ def carrier_to_wav_bytes(carrier: AudioCarrier) -> bytes:
         wf.setnchannels(carrier.nchannels)
         wf.setsampwidth(carrier.sampwidth)
         wf.setframerate(carrier.framerate)
-        wf.writeframes(carrier.array.tobytes())
+        if carrier.sampwidth == 3:
+            packed = np.column_stack([(carrier.array >> shift) & 255 for shift in (0, 8, 16)])
+            wf.writeframes(packed.astype(np.uint8).tobytes())
+        else:
+            wf.writeframes(carrier.array.astype(carrier.array.dtype.newbyteorder("<")).tobytes())
     return buf.getvalue()
 
 
