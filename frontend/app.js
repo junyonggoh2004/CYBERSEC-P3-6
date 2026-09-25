@@ -283,7 +283,7 @@ function chart(parent,title,series,labels,maxY=null,minY=0) {
 }
 function drawComparison(result) {
   $("comparison-results").hidden=false;
-  metrics("comparison-metrics",[["Changed values",result.changed_percent+"%"],["Max difference",result.max_absolute_difference],["Mean squared error",result.mse.toPrecision(4)],["PSNR",result.psnr_db===null?"Identical":result.psnr_db.toFixed(2)+" dB"]]);
+  metrics("comparison-metrics",[["Changed values",result.changed_percent+"%"],["Max difference",result.max_absolute_difference],["Mean squared error",result.mse.toPrecision(4)],["PSNR",result.psnr_db===null?"Identical":result.psnr_db.toFixed(2)+" dB"]].concat(result.audio_metrics?[["SNR",result.audio_metrics.snr_display]]:[]));
   $("histograms").hidden=!result.histograms; $("waveforms").hidden=!result.waveforms;
   $("difference-panel").hidden=!result.histograms; $("zoom-field").hidden=!result.histograms;
   $("histogram-charts").replaceChildren();$("waveform-charts").replaceChildren();
