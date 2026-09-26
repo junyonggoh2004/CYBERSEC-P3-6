@@ -347,6 +347,7 @@ async function compare() {
   finally{$("compare-button").disabled=false;}
 }
 $("compare-button").onclick=run(compare);
+$("compare-zoom").oninput=()=>document.querySelectorAll("#compare-before img,#compare-after img").forEach(img=>img.style.transform="scale("+$("compare-zoom").value+")");
 function chart(parent,title,series,labels,maxY=null,minY=0) {
   const container=document.createElement("div");container.className="chart-container";
   const heading=document.createElement("p");heading.textContent=title;container.append(heading);
@@ -366,7 +367,7 @@ function drawComparison(result) {
   $("comparison-results").hidden=false;
   metrics("comparison-metrics",[["Changed values",result.changed_percent+"%"],["Max difference",result.max_absolute_difference],["Mean squared error",result.mse.toPrecision(4)],["PSNR",result.psnr_db===null?"Identical":result.psnr_db.toFixed(2)+" dB"]].concat(result.audio_metrics?[["SNR",result.audio_metrics.snr_display]]:[]));
   $("histograms").hidden=!result.histograms; $("waveforms").hidden=!result.waveforms;
-  $("difference-panel").hidden=!result.histograms;
+  $("difference-panel").hidden=!result.histograms; $("zoom-field").hidden=!result.histograms;
   $("histogram-charts").replaceChildren();$("waveform-charts").replaceChildren();
   if(result.histograms) {
     Object.entries(result.histograms).forEach(([name,h])=>chart($("histogram-charts"),name+" channel",[{values:h.before},{values:h.after}],"Intensity 0 → 255 · y = value count"));
@@ -478,7 +479,7 @@ async function sha256Hex(file) {
 }
 $("analysis-form").onsubmit=run(async e=>{
   e.preventDefault();if(!state.analysisFile)throw new Error("Choose a PNG, WAV or video file to analyse.");
-  const file=state.analysisFile, data=new FormData();data.append("media_file",file);data.append("image_file",file);data.append("window_size",$("window-size").value);
+  const file=state.analysisFile, data=new FormData();data.append("media_file",file);data.append("window_size",$("window-size").value);
   clearAnalysis();const revision=state.analysisRevision;$("analysis-button").disabled=true;
   $("analysis-status").textContent=kindOf(file)==="image"?"Analysing image channels…":"Analysing consecutive audio samples…";
   try {

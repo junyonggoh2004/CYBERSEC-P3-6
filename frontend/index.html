@@ -10,7 +10,7 @@
 <body>
 <header class="topbar"><div class="brand"><div><h1>Stego Integrity Verifier</h1><p class="subtitle">INF2005 ACW1 · Team P3-6 · Image &amp; audio</p></div></div><div class="key-panel"><span class="key-status" id="key-status">Loading Alice's keys…</span><button class="btn btn-ghost" id="theme">Dark theme</button></div></header>
 <nav class="quicknav" aria-label="Workspace pages">
-<a href="#protect" data-page="protect">Protect</a><a href="#verify" data-page="verify">Verify</a><a href="#compare" data-page="compare">Compare</a><a href="#analysis" data-page="analysis">Steganalysis</a><a href="#keys" data-page="keys">Alice's keys</a>
+<a href="#protect" data-page="protect">01 Protect</a><a href="#verify" data-page="verify">02 Verify</a><a href="#compare" data-page="compare">Compare</a><a href="#analysis" data-page="analysis">Steganalysis</a><a href="#keys" data-page="keys">Alice's keys</a>
 </nav>
 <main class="layout">
 <div id="notice" class="notice" role="status" aria-live="polite" hidden><span id="notice-text"></span><button type="button" class="notice-close" id="notice-close" aria-label="Dismiss message">×</button></div>
@@ -118,6 +118,7 @@
 <div class="three-grid"><section class="card"><h3>Hidden content</h3><div id="compare-payload" class="comparison-stage"><p class="empty">Available for the last protected pair.</p></div></section><section class="card"><h3>Original cover</h3><div id="compare-before" class="comparison-stage"></div></section><section class="card"><h3>Stego object</h3><div id="compare-after" class="comparison-stage"></div></section></div>
 <section class="card" id="comparison-results" hidden>
 <div id="comparison-metrics" class="metric-grid"></div>
+<label class="field" id="zoom-field">Linked image zoom<input id="compare-zoom" type="range" min="1" max="4" step=".1" value="1"></label>
 <div id="histograms"><h3>Overlaid intensity histograms</h3><p class="hint"><span class="legend before"></span> Original (solid) <span class="legend after"></span> Stego (dashed). Matching axes, 256 intensity bins per channel.</p><div id="histogram-charts" class="chart-grid"></div></div>
 <div id="waveforms" hidden><h3>Aligned waveforms · channel 1</h3><p class="hint">Both waveforms use the same time buckets and full-scale amplitude. The difference uses that same scale.</p><div id="waveform-charts"></div><div id="channel-metrics" class="table-wrap"></div></div>
 <details id="difference-panel"><summary>Difference views</summary>

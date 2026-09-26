@@ -554,9 +554,7 @@ def api_analyse():
     try:
         upload = request.files.get("media_file") or request.files.get("image_file")
         if upload is None:
-            upload = next(iter(request.files.values()), None)
-        if upload is None:
-            return _bad_request("Upload a file to analyse.")
+            return _bad_request("media_file is required.")
         mode = request.args.get("mode", "sync")
         if mode not in ("sync", "async"):
             return _bad_request("mode must be 'sync' or 'async'.")
