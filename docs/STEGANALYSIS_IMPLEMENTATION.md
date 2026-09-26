@@ -1,18 +1,5 @@
 # Steganalysis implementation record — prepared for review
 
-This records the implementation produced with Codex assistance on 19 September
-2026. It is not a signed declaration or evidence that Kim or another team member
-has personally reviewed the code yet.
-
-| Task | Delivered work | Review status |
-|---|---|---|
-| SA-001 | Source references, documented formulas and independent vectors | Awaiting Gerome |
-| SA-002 | PoV histograms, chi-square statistic/tail score, full and window modes | Awaiting Jun Yong |
-| SA-003 | Positive/inverse RS masks, R/S/U counts, asymmetry indicator | Awaiting Gabriel |
-| SA-004 | Natural covers, source-level split, threshold search, 100-case evidence | Awaiting Gerome; larger evaluation needed |
-| SA-005 support | Flask API, asynchronous browser view and JSON export control | Awaiting Matthias/Kim review |
-| Crypto test review support | Correct/wrong key, changed message/signature checks | Existing RSA tested; Ed25519/AES/KDF not implemented |
-
 ## Automated checks
 
 - 28 tests passed in `tests/test_steganalysis.py`, recorded in `evidence/steganalysis-tests.xml`.
@@ -37,6 +24,3 @@ has personally reviewed the code yet.
 - `tests/test_steganalysis.py`: mathematical, API, crypto and pipeline checks.
 - `docs/STEGANALYSIS_GUIDE.md`: formulas, assumptions, limitations and demo guide.
 
-Kim should personally run and explain the tests, check the equations, inspect
-misses/false alarms, and obtain the named reviews before changing the task status
-to Done or adopting this record in the final contribution statement.

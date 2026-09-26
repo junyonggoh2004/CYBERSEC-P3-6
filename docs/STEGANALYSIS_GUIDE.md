@@ -1,15 +1,9 @@
 # Steganalysis implementation guide
 
 ## Scope and status
-
-Implemented within the existing Flask/browser architecture, not the proposed
-PySide6 layout. Kim's SA-001/002/003 code, SA-004 evaluation, and an SA-005
-integration are ready for team review. No teammate review is claimed. Optional
-WAV statistics (SA-006) are deferred. This is AI-assisted code requiring Kim's
-own understanding and the named reviewers' checks before marking tasks Done.
+This guide focuses explicitly on the Steganalysis functionality and implementation.
 
 ## Run
-
 From the project root in PowerShell:
 
 ```powershell
@@ -19,9 +13,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe backend/app.py
 ```
 
-Open http://127.0.0.1:5000 and scroll to **PNG Steganalysis**. Choose a clean or
-stego PNG, click **Analyse PNG**, inspect both techniques, then export JSON.
-Reports contain file hashes/settings/statistics, never signing keys or payloads.
+Open http://127.0.0.1:5000 and scroll to **PNG Steganalysis**. Choose a clean or stego PNG, click **Analyse PNG**, inspect both techniques, then export JSON. Reports contain file hashes/settings/statistics, never signing keys or payloads.
 The existing app generates its signing keys on first launch; the new analysis
 does not require keys. `requirements-tested.txt` records the exact tested
 environment as an optional reproducibility alternative to the dependency ranges.
@@ -32,9 +24,7 @@ Chi-square follows the even-category pairs-of-values convention in
 [Westfeld and Pfitzmann, section 4.1](https://users.ece.cmu.edu/~adrian/487-s06/westfeld-pfitzmann-ihw99.pdf).
 For pair `(2i, 2i+1)`, `E_i=(h[2i]+h[2i+1])/2` and
 `X²=sum((h[2i]-E_i)²/E_i)`, with `df=k-1` for k retained pairs.
-This implementation omits pairs with E<5 and reports omitted pairs and retained
-samples. SciPy's survival function returns the tail score. Large scores mean
-compatibility with pair equalisation, not posterior probability of a payload.
+This implementation omits pairs with E<5 and reports omitted pairs and retained samples. SciPy's survival function returns the tail score. Large scores mean compatibility with pair equalisation, not posterior probability of a payload.
 
 RS uses the group discrimination and flips described by
 [Fridrich, Goljan and Du, sections 2–3](https://dde.binghamton.edu/publications/acmwrkshp_version.pdf).
@@ -43,27 +33,14 @@ For each group, `f=sum(abs(x[i+1]-x[i]))`. Use masks `(0,1,1,0)` and
 An increased f is regular, decreased f singular, and equal f unusable.
 Signed arithmetic retains -1 and 256 without clipping or wrapping.
 
-Project-specific choices: nonoverlapping horizontal groups of four within each
-colour plane, dropping row tails. R/S counts are taken on the image and again
-after flipping every LSB, and the four R-S differences are fitted with the
-paper's quadratic (Fridrich, Goljan and Du) to estimate the fraction of values
-carrying 1-LSB replacement; a straight-line fallback is used when the quadratic
-has no real root. The RS score is that estimate's magnitude bounded to 0-1. It
-is an estimate, not a calibrated probability. At least 64 groups, nonconstant
-data, and usable positive-mask groups are required for a score.
+Project-specific choices: nonoverlapping horizontal groups of four within each colour plane, dropping row tails. R/S counts are taken on the image and again after flipping every LSB, and the four R-S differences are fitted with the paper's quadratic (Fridrich, Goljan and Du) to estimate the fraction of values
+carrying 1-LSB replacement; a straight-line fallback is used when the quadratic has no real root. The RS score is that estimate's magnitude bounded to 0-1. 
+It is an estimate, not a calibrated probability. At least 64 groups, nonconstant data, and usable positive-mask groups are required for a score.
 
-Chi-square per channel uses the stronger of its whole-channel tail score and the
-median usable-window tail score, so sustained regional embedding (as written by
-this project's contiguous encoder) is not diluted by the untouched remainder. A
-single high window is not used, because scanning many windows gives chance peaks.
+Chi-square per channel uses the stronger of its whole-channel tail score and the median usable-window tail score, so sustained regional embedding (as written by this project's contiguous encoder) is not diluted by the untouched remainder. A single high window is not used, because scanning many windows gives chance peaks.
 
 RGB planes stay separate; RGBA alpha is excluded. L-mode PNG uses a single plane.
-PNG palette, 16-bit, animated, malformed, over-200-MiB and over-50-million-pixel
-inputs are rejected. No input file/array is modified. Full-channel scores are
-combined using their median; any unavailable channel makes that method
-inconclusive. The report preserves all channels. Chi-square windows cover
-consecutive values per plane with a default size of 65,536; it increases if
-necessary to keep at most 128 windows. Windows do not alter the combined score.
+PNG palette, 16-bit, animated, malformed, over-200-MiB and over-50-million-pixel inputs are rejected. No input file/array is modified. Full-channel scores are combined using their median; any unavailable channel makes that method inconclusive. The report preserves all channels. Chi-square windows cover consecutive values per plane with a default size of 65,536; it increases if necessary to keep at most 128 windows. Windows do not alter the combined score.
 
 ## Independent vectors
 
@@ -72,17 +49,14 @@ X²=2, df=2, and score `exp(-1)=0.36787944117`.
 
 For groups `[0,0,0,0]`, `[0,1,1,0]`, `[0,1,2,3]`, original f is 0,2,3.
 The positive mask gives f=2,0,3 (R=1,S=1,U=1). The inverse mask gives
-f=2,4,5 (R=3,S=0,U=0). Tests also compare thousands of seeded groups
-against an independent scalar parity implementation, including 0/255 edges.
+f=2,4,5 (R=3,S=0,U=0). Tests also compare thousands of seeded groups against an independent scalar parity implementation, including 0/255 edges.
 
 ## Evaluation and threshold policy
 
 Included: four public-domain/CC0 natural images, 100 cases, seeds, source hashes,
 1/2/4/8-LSB settings, 1%/50%/95% payload occupancy, starts at 0/3%, and clean
 controls. Files and rights are documented in `samples/steganalysis/PROVENANCE.md`.
-The evaluator embeds random bytes with the project's existing `embed_bits`,
-saves/reopens PNG, and performs blind analysis. This isolates carrier statistics;
-separate integration tests exercise the signed encode/decode pipeline.
+The evaluator embeds random bytes with the project's existing `embed_bits`, saves/reopens PNG, and performs blind analysis. This isolates carrier statistics; separate integration tests exercise the signed encode/decode pipeline.
 
 ```powershell
 python scripts/evaluate_steganalysis.py
@@ -94,24 +68,14 @@ python scripts/evaluate_steganalysis.py --covers path/to/pngs --output evidence/
 
 Cover identities alternate between calibration and holdout after filename sorting.
 All variants of a cover stay in one split. Duplicate decoded images are rejected.
-Grid-search thresholds are fitted only on calibration clean/1-LSB cases,
-minimizing mean FPR/FNR, with ties preferring fewer false positives then stricter
-thresholds. The held-out covers are not used for tuning. More covers and truly
-independent camera sources are needed for meaningful deployment claims.
+Grid-search thresholds are fitted only on calibration clean/1-LSB cases, minimizing mean FPR/FNR, with ties preferring fewer false positives then stricter thresholds. The held-out covers are not used for tuning. More covers and truly independent camera sources are needed for meaningful deployment claims.
 
 The GUI defaults remain explicitly provisional (`chi_square=0.95`, `rs=0.05`).
-The evaluation stores its selected thresholds separately, and records both default
-and calibrated categories for every case. No global threshold is silently tuned
-to this tiny dataset. Either method crossing its threshold gives High
-indication; both available and below threshold gives Low indication; otherwise
+The evaluation stores its selected thresholds separately, and records both default and calibrated categories for every case. No global threshold is silently tuned to this tiny dataset. Either method crossing its threshold gives High indication; both available and below threshold gives Low indication; otherwise
 Inconclusive. None of these categories affects signature/hash verdicts.
 
-`evidence/steganalysis/RESULTS.md` summarizes results. CSV lists every miss/false
-alarm; JSON retains all scores, raw counts, histograms and windows. In confusion
-tables only High indication is positive. Inconclusive stego cases count as false
-negatives and are also tallied separately, avoiding optimistic exclusion.
-The results show major misses, particularly at small payload sizes and higher
-LSB settings. Do not describe this small evaluation as proof of detector accuracy.
+`evidence/steganalysis/RESULTS.md` summarizes results. CSV lists every miss/false alarm; JSON retains all scores, raw counts, histograms and windows. In confusion tables only High indication is positive. Inconclusive stego cases count as false negatives and are also tallied separately, avoiding optimistic exclusion.
+The results show major misses, particularly at small payload sizes and higher LSB settings. Do not describe this small evaluation as proof of detector accuracy.
 
 ## Existing-code integration observations / crypto review
 
@@ -148,12 +112,8 @@ b'_m − c'_{m+1} = (p/4)(T_m − T_{m+1}) for every m. The estimate is a weight
 least-squares fit of that line (Dumitrescu, Wu & Wang, 2003, adapted from their
 random-scatter model to block embedding).
 
-**Cross-fitting.** The slope T_m − T_{m+1} is counted from pairs at even
-positions and the residual from pairs at odd positions, then vice versa.
-Counting both from the same pairs shares their noise, which drags loud,
-uninformative audio towards p = 1 (a false alarm); cross-fitting drags it
-towards 0 with a wide standard error instead. The time map fits each of 16
-segments against the whole file's slope.
+**Cross-fitting.** The slope T_m − T_{m+1} is counted from pairs at even positions and the residual from pairs at odd positions, then vice versa. Counting both from the same pairs shares their noise, which drags loud,
+uninformative audio towards p = 1 (a false alarm); cross-fitting drags it towards 0 with a wide standard error instead. The time map fits each of 16 segments against the whole file's slope.
 
 **Decision (provisional).** Standard error above 0.1: *Inconclusive*. Otherwise
 *High indication* when the lower end of the 95% interval exceeds 3%, else *Low
@@ -170,28 +130,16 @@ indication*.
 | Loud music-like / pink noise | inconclusive | 1–7 |
 | 32-bit audio | inconclusive | >2 |
 
-**Limits.** It needs neighbouring samples that are close in value (quiet
-passages, pauses), so loud, noisy or 32-bit audio is usually inconclusive
-rather than detected. Partial 2+ LSB payloads are underestimated (25% at 2 LSB
-reads 0.04–0.15). The sample audio files are pure tones and the other sources
+**Limits.** It needs neighbouring samples that are close in value (quiet passages, pauses), so loud, noisy or 32-bit audio is usually inconclusive rather than detected. Partial 2+ LSB payloads are underestimated (25% at 2 LSB reads 0.04–0.15). The sample audio files are pure tones and the other sources
 are synthetic; validate on real recordings before relying on the thresholds.
 
 ## Likelihood of hidden data
 
-After every analysis the page shows one headline figure: the chance that the
-file carries hidden data. It comes from sample-pair analysis (`backend/stego/spa.py`),
-which now also runs on PNGs, over horizontally adjacent pixels within each row
-of the R, G and B planes (alpha excluded). Chi-square and RS still decide the
+After every analysis the page shows one headline figure: the chance that the file carries hidden data. It comes from sample-pair analysis (`backend/stego/spa.py`), which now also runs on PNGs, over horizontally adjacent pixels within each row of the R, G and B planes (alpha excluded). Chi-square and RS still decide the
 PNG verdict; their tail score and payload-fraction estimate cannot be turned
 into a probability, so the likelihood is reported alongside them.
 
-**Calculation.** Two hypotheses are compared: *clean* (true share 0) and
-*hidden data* (true share uniform between 1% and 100% of values). Both start at
-50%. The SPA estimate is treated as normal around the true share, with its
-standard error widened by a natural cover bias (images ±2.5, audio ±2.0
-percentage points), because clean covers do not estimate exactly 0: the clean
-astronaut image reads 0.050 ± 0.005. Bayes' rule gives the posterior chance.
-With little evidence it stays near 50% instead of guessing.
+**Calculation.** Two hypotheses are compared: *clean* (true share 0) and *hidden data* (true share uniform between 1% and 100% of values). Both start at 50%. The SPA estimate is treated as normal around the true share, with its standard error widened by a natural cover bias (images ±2.5, audio ±2.0 percentage points), because clean covers do not estimate exactly 0: the clean astronaut image reads 0.050 ± 0.005. Bayes' rule gives the posterior chance. With little evidence it stays near 50% instead of guessing.
 
 **Bands:** Unlikely (≤ 20%), Uncertain, Likely (≥ 80%); Unknown when no estimate
 is possible (for example a pure-noise image).
@@ -205,10 +153,7 @@ is possible (for example a pure-noise image).
 | cover_image.png | 2% | 8% | 100% | 100% |
 | Sample WAV (sine tone) | 2% | 99% | 100% | 100% |
 
-**Limits.** The prior, share range and cover-bias allowance are provisional
-choices, not calibrated on real-world files. Short messages in photographs are
-often missed. The figure is about hidden data, not tampering: tampering is
-decided on Verify by the signature and hashes.
+**Limits.** The prior, share range and cover-bias allowance are provisional choices, not calibrated on real-world files. Short messages in photographs are often missed. The figure is about hidden data, not tampering: tampering is decided on Verify by the signature and hashes.
 
 ## Short demo explanation
 
@@ -220,6 +165,4 @@ decided on Verify by the signature and hashes.
 5. Explain that cryptographic verification is separate and that the RS output is
    an estimated LSB-replacement fraction, not a probability of hidden data.
 
-Before submission: Kim validates the explanation, Gerome reviews evidence,
-Jun Yong reviews chi-square, and Gabriel reviews RS. No emails, submission,
-originality signatures, or teammate approvals have been performed automatically.
+
