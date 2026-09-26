@@ -25,6 +25,10 @@ function readBlob(blob) {
   return new Promise((resolve,reject)=>{const r=new w.FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsArrayBuffer(blob);});
 }
 w.Blob.prototype.text = async function () { return Buffer.from(await readBlob(this)).toString('utf8'); };
+w.Blob.prototype.arrayBuffer = async function () { return new Uint8Array(await readBlob(this)).slice().buffer; };
+// jsdom has no SubtleCrypto; analysis checks the returned SHA-256 against the selected file.
+const nodeSubtle = require('node:crypto').webcrypto.subtle;
+Object.defineProperty(w.crypto, 'subtle', { configurable: true, value: { digest: (alg, data) => nodeSubtle.digest(alg, new Uint8Array(data)) } });
 // File inputs in jsdom have no OS picker. This adapter reads the File list used
 // by the test instead of creating an empty placeholder upload.
 class BrowserFormData {
@@ -102,8 +106,9 @@ async function verify(verdict) {
   assert.equal($('waveforms').hidden,true);
   click('analyse-created');submit('analysis-form');
   await wait(()=>!$('analysis-export').disabled,'analysis');
-  assert.match($('chi-results').textContent,/Median p-value/);
-  assert.match($('rs-results').textContent,/Median asymmetry/);
+  assert.match($('chi-results').textContent,/Summary tail score/);
+  assert.match($('rs-results').textContent,/Estimated LSB-replacement fraction/);
+  assert.match($('analysis-status').textContent,/file match verified/);
   assert.equal($('likelihood-card').hidden,false);assert.match($('likelihood-value').textContent,/%|Unknown/); // the fixture is random noise, which gives no evidence
   assert.equal($('page-analysis').querySelectorAll('canvas').length,0,'histograms belong to Compare');
   set('window-size','1024');assert.equal($('analysis-export').disabled,true,'invalidate stale analysis');

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import mimetypes
 import sys
 from pathlib import Path
@@ -20,7 +21,7 @@ from werkzeug.exceptions import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from stego import analysis, audio_analysis, comparison, crypto_utils, jobs, pipeline  # noqa: E402
+from stego import analysis, audio_analysis, audio_metrics, comparison, crypto_utils, jobs, pipeline  # noqa: E402
 from cryptography.hazmat.primitives import serialization
 from stego import audio_lsb, image_lsb, payload, media_input, encryption, video_lsb
 from stego.bitstream import StegoStream
@@ -188,6 +189,23 @@ def _read_content(form, files, cover_type):
     return kind, data, upload.filename, mime
 
 
+def _audio_metrics_json(metrics):
+    """Cover-vs-stego distortion for a JSON response, or None when there is
+    none. An infinite SNR (stego identical to the cover) is sent as null
+    because Infinity is not valid JSON; snr_reference says why."""
+    if metrics is None:
+        return None
+    return {
+        "changed_sample_count": metrics.changed_samples,
+        "total_samples": metrics.total_samples,
+        "mse": metrics.mse,
+        "snr_db": metrics.snr_db if math.isfinite(metrics.snr_db) else None,
+        "snr_reference": metrics.snr_reference,
+        "snr_display": metrics.snr_display,
+        "max_sample_change": metrics.max_sample_change,
+    }
+
+
 def _cover_bytes(upload, cover_type):
     if upload is None:
         raise ValueError("Choose a cover file.")
@@ -223,13 +241,22 @@ def api_compare():
             raise ValueError("Choose image, audio or video.")
         before = _cover_bytes(request.files.get("original_file"), kind)
         after = _cover_bytes(request.files.get("stego_file"), kind)
-        if kind != "video":
-            return jsonify(comparison.compare(kind, before, after))
-        # Video payloads live in the audio track, so compare the two audio tracks.
-        (before_wav, video_info), (after_wav, _) = pipeline.video_audio_track(before), pipeline.video_audio_track(after)
-        result = comparison.compare("audio", before_wav, after_wav)
-        result.update(cover_info={**video_info, **result["cover_info"], "embedded_in": "audio_track"},
-                      original_size_bytes=len(before), stego_size_bytes=len(after))
+        if kind == "video":
+            # Video payloads live in the audio track, so compare the two audio tracks.
+            (before_wav, video_info), (after_wav, _) = pipeline.video_audio_track(before), pipeline.video_audio_track(after)
+            result = comparison.compare("audio", before_wav, after_wav)
+            result.update(cover_info={**video_info, **result["cover_info"], "embedded_in": "audio_track"},
+                          original_size_bytes=len(before), stego_size_bytes=len(after))
+        else:
+            before_wav, after_wav = before, after
+            result = comparison.compare(kind, before, after)
+        if kind in ("audio", "video"):
+            # Adds the SNR measured against the cover's own signal (with
+            # silent/identical covers labelled) to the paired measurements.
+            result["audio_metrics"] = _audio_metrics_json(audio_metrics.compare(
+                audio_lsb.load_audio_carrier(before_wav).array,
+                audio_lsb.load_audio_carrier(after_wav).array,
+            ))
         return jsonify(result)
     except (ValueError, OSError, pipeline.StegoError) as exc:
         return _bad_request(str(exc))

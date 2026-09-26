@@ -18,8 +18,8 @@ def normalise(data, kind, filename):
     try:
         audio_lsb.load_audio_carrier(data)
         return data
-    except (ValueError, EOFError, wave.Error):
-        pass
+    except (ValueError, EOFError, wave.Error) as exc:
+        wav_error = exc
     with tempfile.TemporaryDirectory() as folder:
         source = Path(folder) / ('source' + extension)
         target = Path(folder) / 'carrier.wav'
@@ -27,5 +27,8 @@ def normalise(data, kind, filename):
         try:
             video_lsb._run_ffmpeg(['-nostdin', '-i', str(source), '-map', '0:a:0', '-vn', '-c:a', 'pcm_s32le', str(target)])
         except video_lsb.VideoError as exc:
+            if extension == '.wav' and isinstance(wav_error, ValueError):
+                # Keep the WAV reader's specific explanation (not a WAV, cut off, ...).
+                raise wav_error from exc
             raise ValueError('Cannot decode this audio file. Choose a valid supported audio file.') from exc
         return target.read_bytes()

@@ -449,8 +449,14 @@ canvas { width: 100%; height: auto; display: block; }
 .passed { color: var(--good); }
 .failed { color: var(--danger); }
 .result-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
-.notice { padding: 15px 20px; background: var(--bg-soft); border-left: 4px solid var(--accent); border-radius: 8px; grid-column: 1 / -1; }
-.notice.error { border-color: var(--danger); color: var(--danger); }
+/* Overlaid message: floats above the page so showing it never shifts the layout. */
+.notice { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 40; width: min(640px, calc(100vw - 32px)); display: flex; align-items: flex-start; gap: 12px; padding: 14px 12px 14px 20px; background: var(--card); border: 1px solid var(--card-border); border-left: 4px solid var(--accent); border-radius: 8px; box-shadow: 0 8px 28px #0f1a2e33; }
+.notice.anchored { position: absolute; transform: translate(-50%, -50%); }
+#notice-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.notice-close { flex: none; width: 28px; height: 28px; margin: -4px 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-dim); font-size: 1.25rem; line-height: 1; cursor: pointer; }
+.notice-close:hover { background: var(--bg-soft); color: var(--text); }
+.notice-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.notice.error { border-left-color: var(--danger); color: var(--danger); }
 #key-list code { font-size: .68rem; overflow-wrap: anywhere; }
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #5a83d8; outline-offset: 2px; }
 /* Steganalysis likelihood: one headline number with a bar and a plain-language band. */
@@ -465,3 +471,5 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px
 @media(prefers-reduced-motion:reduce) { .likelihood-bar span { transition: none; } }
 @media(max-width:800px) { .three-grid { grid-template-columns: 1fr; } .three-grid .comparison-stage { height: 280px; } .bit-lesson { flex-direction: column; align-items: flex-start; } }
 @media(max-width:560px) { .field-grid,.chart-grid { grid-template-columns: 1fr; } .checks { grid-template-columns: repeat(2,minmax(0,1fr)); } .bit { padding: 5px 7px; } .metric strong { font-size: 1rem; } }
+.analysis-windows { max-height: 340px; overflow-y: auto; }
+.analysis-windows thead { position: sticky; top: 0; background: var(--card); }

@@ -9,7 +9,28 @@ const bytes = value => value < 1024 ? value + " B" : value < 1048576 ? (value / 
 // carriers (backend/stego/media_input.py); videos are embedded in their audio track.
 const kindOf = file => file && (/\.(png|jpe?g|webp|bmp|tiff?)$/i.test(file.name) ? "image" : /\.(wav|mp3|flac|ogg|m4a|aac|aiff?)$/i.test(file.name) ? "audio" : /\.(mp4|mkv|mov|avi|webm|m4v)$/i.test(file.name) ? "video" : null);
 const fileLabel = file => file ? file.name + " · " + bytes(file.size) : "No file selected";
-function notice(message, error = false) { $("notice").textContent = message; $("notice").classList.toggle("error", error); $("notice").hidden = !message; }
+// An upload error floats over the upload area it concerns; other messages
+// float at the top of the window. Neither shifts the page layout.
+let noticeAnchor = null;
+function placeNotice() {
+  const el = $("notice"), anchored = !el.hidden && !!noticeAnchor?.getClientRects().length;
+  el.classList.toggle("anchored", anchored);
+  if (!anchored) { el.style.top = el.style.left = el.style.width = ""; return; }
+  const box = noticeAnchor.getBoundingClientRect(), parent = (el.offsetParent || document.body).getBoundingClientRect();
+  el.style.top = (box.top - parent.top + box.height / 2) + "px";
+  el.style.left = (box.left - parent.left + box.width / 2) + "px";
+  el.style.width = Math.max(240, Math.min(640, box.width - 24)) + "px";
+}
+function notice(message, error = false, anchor = null) {
+  $("notice-text").textContent = message; $("notice").classList.toggle("error", error); $("notice").hidden = !message;
+  noticeAnchor = message ? anchor : null; placeNotice();
+}
+$("notice-close").onclick = () => notice("");
+window.addEventListener("resize", placeNotice);
+function uploadAreaFor(target) {
+  if (!target?.closest) return null;
+  return target.closest(".dropzone") || target.closest("form")?.querySelector(".dropzone") || null;
+}
 async function api(path, data) {
   const response = await fetch(path, data ? { method: "POST", body: data } : {});
   let result;
@@ -17,7 +38,7 @@ async function api(path, data) {
   if (!response.ok || result.error) throw new Error(result.error || "Request failed (" + response.status + ").");
   return result;
 }
-function run(handler) { return async event => { try { await handler(event); } catch (error) { notice(error.message, true); } }; }
+function run(handler) { return async event => { try { await handler(event); } catch (error) { notice(error.message, true, uploadAreaFor(event?.target)); } }; }
 function table(headers, rows) { return '<table><thead><tr>' + headers.map(x => "<th>" + esc(x) + "</th>").join("") + "</tr></thead><tbody>" + rows.map(row => "<tr>" + row.map(x => "<td>" + esc(x) + "</td>").join("") + "</tr>").join("") + "</tbody></table>"; }
 function detailsTable(rows) { return '<table class="detail-table"><tbody>' + rows.map(([key,value]) => "<tr><th>" + esc(key) + "</th><td>" + esc(value) + "</td></tr>").join("") + "</tbody></table>"; }
 function metrics(id, items) { $(id).innerHTML = items.map(([name,value]) => '<div class="metric"><span>' + esc(name) + "</span><strong>" + esc(value) + "</strong></div>").join(""); }
@@ -344,7 +365,7 @@ function chart(parent,title,series,labels,maxY=null,minY=0) {
 }
 function drawComparison(result) {
   $("comparison-results").hidden=false;
-  metrics("comparison-metrics",[["Changed values",result.changed_percent+"%"],["Max difference",result.max_absolute_difference],["Mean squared error",result.mse.toPrecision(4)],["PSNR",result.psnr_db===null?"Identical":result.psnr_db.toFixed(2)+" dB"]]);
+  metrics("comparison-metrics",[["Changed values",result.changed_percent+"%"],["Max difference",result.max_absolute_difference],["Mean squared error",result.mse.toPrecision(4)],["PSNR",result.psnr_db===null?"Identical":result.psnr_db.toFixed(2)+" dB"]].concat(result.audio_metrics?[["SNR",result.audio_metrics.snr_display]]:[]));
   $("histograms").hidden=!result.histograms; $("waveforms").hidden=!result.waveforms;
   $("difference-panel").hidden=!result.histograms; $("zoom-field").hidden=!result.histograms;
   $("histogram-charts").replaceChildren();$("waveform-charts").replaceChildren();
@@ -397,11 +418,19 @@ $("analyse-created").onclick=run(()=>{
   $("analysis-file").value=""; setAnalysisFile(state.latest.file); location.hash="analysis";
 });
 const fmt=v=>v==null?"Insufficient data":Number(v).toPrecision(5);
+// Tail scores can be far below 0.0001 or underflow to 0; keep them readable.
+const tail=v=>v==null||!Number.isFinite(v)?"Insufficient data":v===0?"Below numerical precision (0)":v<0.0001?v.toExponential(4):v.toFixed(5);
 function renderImageAnalysis(job) {
-  const indication=(score,threshold)=>score==null?"Inconclusive":score>=threshold?"Indicators detected":"No strong indicators";
-  $("chi-results").innerHTML=detailsTable([["Median p-value",fmt(job.scores.chi_square)],["Threshold (provisional)",job.combined.thresholds.chi_square],["Interpretation",indication(job.scores.chi_square,job.combined.thresholds.chi_square)]])+table(["Channel","χ²","df","p-value","Usable pairs"],Object.entries(job.channels).map(([name,c])=>[name,fmt(c.chi_square.statistic),c.chi_square.degrees_of_freedom,fmt(c.chi_square.score),c.chi_square.usable_pairs]));
-  $("rs-results").innerHTML=detailsTable([["Median asymmetry",fmt(job.scores.rs)],["Threshold (provisional)",job.combined.thresholds.rs],["Interpretation",indication(job.scores.rs,job.combined.thresholds.rs)],["Masks","[0,1,1,0] / [0,-1,-1,0]"]])+table(["Channel","Groups","R+ / S+","R− / S−","Score"],Object.entries(job.channels).map(([name,c])=>[name,c.rs.groups,c.rs.positive.regular+" / "+c.rs.positive.singular,c.rs.negative.regular+" / "+c.rs.negative.singular,fmt(c.rs.score)]));
-  $("analysis-conclusion").textContent=({"High indication":"Indicators detected by both methods.","Low indication":"No strong indicators at these thresholds. This does not establish absence of hidden data.","Inconclusive":"Inconclusive: methods disagree or data is insufficient."})[job.combined.category];
+  const thresholds=job.combined.thresholds, channels=Object.entries(job.channels);
+  const indication=(score,threshold)=>score==null?"Insufficient data":score>=threshold?"Indicators detected":"No strong indicators";
+  const windows=[];
+  for(const [name,c] of channels) c.windows.forEach((w,i)=>windows.push([name,i+1,w.start+"–"+w.stop,w.sample_count,fmt(w.statistic)+" / "+w.degrees_of_freedom,tail(w.score),w.score==null?"Insufficient data":w.score>=thresholds.chi_square?"At/above threshold":"Below threshold"]));
+  $("chi-results").innerHTML=detailsTable([["Summary tail score",tail(job.scores.chi_square)],["Threshold (provisional)",thresholds.chi_square],["Interpretation",indication(job.scores.chi_square,thresholds.chi_square)]])
+    +table(["Channel","χ²","df","Whole-channel tail","Window median tail","Channel summary"],channels.map(([name,c])=>[name,fmt(c.chi_square.statistic),c.chi_square.degrees_of_freedom,tail(c.chi_square.score),tail(c.chi_square_regional_median_score),tail(c.chi_square_summary_score)]))
+    +'<details><summary>Window results (requested size '+esc(job.configuration.requested_window_size)+')</summary><div class="table-wrap analysis-windows">'+table(["Channel","Window","Start–end","Values","Statistic / df","Tail score","Observation"],windows)+"</div></details>";
+  $("rs-results").innerHTML=detailsTable([["Estimated LSB-replacement fraction",fmt(job.scores.rs)],["Threshold (provisional)",thresholds.rs],["Interpretation",indication(job.scores.rs,thresholds.rs)],["Masks","[0,1,1,0] / [0,-1,-1,0]"]])
+    +table(["Channel","Groups","+mask R / S / U","Inverse R / S / U","Estimated fraction"],channels.map(([name,c])=>[name,c.rs.groups,c.rs.positive.regular+" / "+c.rs.positive.singular+" / "+c.rs.positive.unusable,c.rs.negative.regular+" / "+c.rs.negative.singular+" / "+c.rs.negative.unusable,fmt(c.rs.score)]));
+  $("analysis-conclusion").textContent=({"High indication":"Indicators detected: at least one method crossed its threshold. This is compatible with LSB replacement, not proof of hidden data.","Low indication":"No strong indicators: both methods are below their thresholds. This does not establish absence of hidden data.","Inconclusive":"Inconclusive: neither method crossed its threshold and at least one had insufficient data."})[job.combined.category];
   return job.image.width+" × "+job.image.height+" · "+job.image.mode;
 }
 const percent=v=>v==null?"Insufficient data":(100*v).toFixed(1)+"%";
@@ -441,12 +470,20 @@ function renderLikelihood(job) {
     +whole(like.assumed_share_range[0])+"–"+whole(like.assumed_share_range[1])+" of "+unit+", and clean files are allowed a natural bias of ±"
     +(100*like.cover_bias_sd).toFixed(1)+" percentage points. These assumptions are provisional and not calibrated on real-world files; short messages are often missed.";
 }
+// WebCrypto exists only in secure contexts (HTTPS or localhost); elsewhere the
+// local hash comparison is skipped and reported rather than blocking analysis.
+async function sha256Hex(file) {
+  if(!globalThis.crypto?.subtle)return null;
+  const digest=await crypto.subtle.digest("SHA-256",await file.arrayBuffer());
+  return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");
+}
 $("analysis-form").onsubmit=run(async e=>{
   e.preventDefault();if(!state.analysisFile)throw new Error("Choose a PNG, WAV or video file to analyse.");
   const file=state.analysisFile, data=new FormData();data.append("media_file",file);data.append("window_size",$("window-size").value);
   clearAnalysis();const revision=state.analysisRevision;$("analysis-button").disabled=true;
   $("analysis-status").textContent=kindOf(file)==="image"?"Analysing image channels…":"Analysing consecutive audio samples…";
   try {
+    const expectedHash=await sha256Hex(file);
     let job=await api("/api/analyse?mode=async",data);
     while(job.job_id) {
       const id=job.job_id;await new Promise(resolve=>setTimeout(resolve,400));
@@ -456,11 +493,12 @@ $("analysis-form").onsubmit=run(async e=>{
       job=progress.result;
     }
     if(file!==state.analysisFile||revision!==state.analysisRevision)return;
+    if(expectedHash&&job.file_sha256!==expectedHash)throw new Error("Analysed file hash did not match the selected file. No result displayed.");
     state.analysis=job;$("analysis-export").disabled=false;
     const summary=job.method==="sample_pair_analysis"?renderAudioAnalysis(job):renderImageAnalysis(job);
     renderLikelihood(job);
     $("analysis-limitations").replaceChildren(...job.limitations.map(text=>{const li=document.createElement("li");li.textContent=text;return li;}));
-    $("analysis-data").textContent=pretty(job);$("analysis-status").textContent="Completed · "+fileLabel(file)+" · "+summary;
+    $("analysis-data").textContent=pretty(job);$("analysis-status").textContent="Completed · "+(expectedHash?"file match verified":"file match not checked (WebCrypto unavailable)")+" · "+fileLabel(file)+" · "+summary;
   } catch(error){$("analysis-status").textContent=error.message;throw error;}
   finally{$("analysis-button").disabled=false;}
 });
