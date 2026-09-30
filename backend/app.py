@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from stego import analysis, audio_analysis, audio_metrics, comparison, crypto_utils, jobs, pipeline  # noqa: E402
 from cryptography.hazmat.primitives import serialization
-from stego import audio_lsb, image_lsb, payload, media_input, encryption, video_lsb
+from stego import audio_lsb, image_lsb, payload, media_input, encryption, video_lsb, listening
 from stego.bitstream import StegoStream
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
@@ -253,10 +253,14 @@ def api_compare():
         if kind in ("audio", "video"):
             # Adds the SNR measured against the cover's own signal (with
             # silent/identical covers labelled) to the paired measurements.
+            before_carrier = audio_lsb.load_audio_carrier(before_wav)
+            after_carrier = audio_lsb.load_audio_carrier(after_wav)
             result["audio_metrics"] = _audio_metrics_json(audio_metrics.compare(
-                audio_lsb.load_audio_carrier(before_wav).array,
-                audio_lsb.load_audio_carrier(after_wav).array,
+                before_carrier.array,
+                after_carrier.array,
             ))
+            # Boosted copies so the (normally inaudible) LSB change can be heard.
+            result["listening"] = listening.build(before_carrier, after_carrier)
         return jsonify(result)
     except (ValueError, OSError, pipeline.StegoError) as exc:
         return _bad_request(str(exc))
@@ -389,7 +393,7 @@ def api_encode():
         except json.JSONDecodeError:
             return _bad_request("team_metadata must be valid JSON.")
 
-        stego_ext = {"image": "png", "audio": "wav", "video": "mkv"}[cover_type]
+        stego_ext = {"image": "png", "audio": "wav", "video": "mp4"}[cover_type]  # pipeline switches video to .mkv if MP4 can't hold it
         stego_out_name = f"stego_{cover_type}.{stego_ext}"
 
         result = pipeline.encode(

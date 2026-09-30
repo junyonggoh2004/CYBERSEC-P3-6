@@ -17,9 +17,9 @@ bitstream/payload/audio_lsb code as a plain WAV cover:
 Because the video stream is always stream-copied (`-c:v copy`), its pixels
 are never touched or re-encoded, so visual quality is completely unaffected.
 The trade-off (see README "Limitations"): the video must already have an
-audio track, and because most standard containers (MP4) don't support raw
-PCM audio, the stego output is produced as a Matroska (.mkv) file, which
-does. ffmpeg itself is not a system requirement - it ships as a portable
+audio track, and the stego audio must stay lossless, so the output is MP4
+with FLAC audio (browser-playable), or Matroska (.mkv) with raw PCM when the
+video codec can't go in MP4. ffmpeg itself is not a system requirement - it ships as a portable
 binary via the `imageio-ffmpeg` pip package.
 """
 from __future__ import annotations
@@ -122,11 +122,23 @@ def extract_audio_track(video_bytes: bytes) -> tuple[bytes, dict]:
         return out_path.read_bytes(), info
 
 
+def container_of(video_bytes: bytes) -> tuple[str, str]:
+    """(extension, MIME type) of a stego video written by remux_with_new_audio."""
+    if video_bytes[4:8] == b"ftyp":
+        return "mp4", "video/mp4"
+    return "mkv", "video/x-matroska"
+
+
 def remux_with_new_audio(original_video_bytes: bytes, new_audio_wav_bytes: bytes) -> bytes:
     """Stream-copies the original video track (untouched, no quality loss)
-    into a Matroska (.mkv) container together with the new stego audio
-    track. MKV is used because it - unlike MP4 - natively supports raw PCM
-    audio, which we need so the embedded LSBs survive the container write.
+    into a new container together with the new stego audio track, which must
+    be stored losslessly so the embedded LSBs survive the container write.
+
+    Preferred: MP4 with FLAC audio. FLAC is lossless (every 16-bit sample
+    decodes back bit-for-bit) and browsers play H.264 + FLAC MP4 with sound,
+    so the stego video can be previewed on the page. Fallback: Matroska (.mkv)
+    with raw PCM, for video codecs the MP4 muxer rejects (e.g. VP8, ProRes).
+    Never AAC/MP3: lossy codecs destroy the hidden bits.
 
     Deliberately does NOT pass `-shortest`: that flag trims both streams to
     the length of the shorter one, and video/audio durations from encoders
@@ -139,19 +151,17 @@ def remux_with_new_audio(original_video_bytes: bytes, new_audio_wav_bytes: bytes
     with tempfile.TemporaryDirectory(prefix="stego_video_") as tmpdir:
         video_path = Path(tmpdir) / "input.bin"
         audio_path = Path(tmpdir) / "stego_audio.wav"
-        out_path = Path(tmpdir) / "output.mkv"
         video_path.write_bytes(original_video_bytes)
         audio_path.write_bytes(new_audio_wav_bytes)
+        inputs = ["-i", str(video_path), "-i", str(audio_path), "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy"]
 
-        _run_ffmpeg(
-            [
-                "-i", str(video_path),
-                "-i", str(audio_path),
-                "-map", "0:v:0",
-                "-map", "1:a:0",
-                "-c:v", "copy",
-                "-c:a", "pcm_s16le",
-                str(out_path),
-            ]
-        )
-        return out_path.read_bytes()
+        mp4_path = Path(tmpdir) / "output.mp4"
+        try:
+            _run_ffmpeg([*inputs, "-c:a", "flac", "-movflags", "+faststart", str(mp4_path)])
+            return mp4_path.read_bytes()
+        except VideoError:
+            pass  # video codec not allowed in MP4: fall back to MKV
+
+        mkv_path = Path(tmpdir) / "output.mkv"
+        _run_ffmpeg([*inputs, "-c:a", "pcm_s16le", str(mkv_path)])
+        return mkv_path.read_bytes()

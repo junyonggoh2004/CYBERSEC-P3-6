@@ -386,7 +386,26 @@ function drawComparison(result) {
     $("channel-metrics").innerHTML=table(["Channel","Changed samples","Total samples","Max difference","RMS difference"],
       result.per_channel.map(c=>[c.channel,c.changed_samples,c.total_samples,c.max_absolute_difference,c.rms_difference.toPrecision(4)]));
   }
-  const {difference_png_base64,change_mask_png_base64,highlighted_difference_png_base64,...readable}=result;$("comparison-data").textContent=pretty(readable);
+  renderListening(result.listening);
+  const {difference_png_base64,change_mask_png_base64,highlighted_difference_png_base64,listening,...readable}=result;
+  if(listening){const {original_wav_base64,stego_wav_base64,difference_wav_base64,...info}=listening;readable.listening=info;}
+  $("comparison-data").textContent=pretty(readable);
+}
+// LSB changes are normally far too quiet to hear, so the server sends boosted
+// listening copies. The original and stego get the SAME boost (a fair A/B);
+// the change on its own is amplified much further. Listening aids only: the
+// stego file itself is never modified.
+function renderListening(listen) {
+  $("listening").hidden=!listen; $("listening-players").replaceChildren(); if(!listen)return;
+  $("listening-hint").textContent="Volume raised "+listen.gain+"× ("+listen.gain_db+" dB) on both so the hidden data can be heard; the stego file itself is unchanged and still verifies. Use headphones."+(listen.truncated?" First "+listen.seconds+" s only.":"");
+  const players=[["listen-original","Original, volume ×"+listen.gain,listen.original_wav_base64],["listen-stego","Stego, volume ×"+listen.gain,listen.stego_wav_base64]];
+  if(listen.difference_wav_base64)players.push(["listen-difference","Only the change, amplified ×"+listen.difference_gain,listen.difference_wav_base64]);
+  for(const [id,label,data] of players) {
+    const box=document.createElement("div");box.className="listen-item";
+    const title=document.createElement("p");title.textContent=label;
+    const audio=document.createElement("audio");audio.controls=true;audio.preload="metadata";audio.src=objectURL(id,fromBase64(data,"audio/wav",id+".wav"));
+    box.append(title,audio);$("listening-players").append(box);
+  }
 }
 function renderDifferenceView() {
   const view=state.differenceViews?.[$("difference-view").value]; if(!view)return;

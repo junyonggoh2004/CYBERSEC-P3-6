@@ -35,10 +35,15 @@ Selections and generated files persist across pages in memory, not across reload
 |---|---|---|
 | PNG | Text, or a text/image/audio/video file | PNG |
 | WAV/PCM | Text, or a text/image/audio/video file | WAV |
-| Video with an audio track (MP4/MKV/MOV/WebM/AVI) | Text, or a text/image/audio/video file | MKV |
+| Video with an audio track (MP4/MKV/MOV/WebM/AVI) | Text, or a text/image/audio/video file | MP4 (MKV if the video codec can't go in MP4) |
 
-Audio covers support signed 16-bit and 32-bit PCM. Payload files are carried as bytes, so any supported content file (TXT, PNG/JPEG, WAV/MP3, MP4/MKV, ...) can be hidden in any cover that has the capacity. Video covers embed into the video's audio track; the video stream is copied untouched and the output is MKV so the
-PCM audio survives. Covers and content files can be dragged onto the drop zones.
+Audio covers support signed 16-bit and 32-bit PCM. Payload files are carried as bytes, so any supported content file (TXT, PNG/JPEG, WAV/MP3, MP4/MKV, ...) can be hidden in any cover that has the capacity. Video covers embed into the video's audio track; the video stream is copied untouched and the audio is stored as lossless FLAC in an MP4, so every hidden bit survives and the
+video plays (with sound) in the browser. Never convert the output to AAC/MP3 audio: lossy codecs destroy the hidden bits.
+Covers and content files can be dragged onto the drop zones.
+
+LSB changes are far too quiet to hear at normal volume. For audio and video covers, **Compare** has a **Listen to the change**
+panel: the original and stego turned up by the same amount, plus the change on its own, amplified. These are listening aids
+only; the stego file itself is unchanged and still verifies.
 
 ## What is signed and hashed
 

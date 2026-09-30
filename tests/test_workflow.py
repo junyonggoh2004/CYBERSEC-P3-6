@@ -225,6 +225,27 @@ def test_api_any_cover_hides_any_content(cover, content_type, filename, mime, co
     assert (dec["payload_type"], dec["data_filename"], dec["data_mime"]) == (content_type, filename, mime)
 
 
+def test_video_cover_outputs_playable_mp4_and_compare_offers_listening(keys):
+    video = (Path(__file__).resolve().parents[1] / "samples" / "cover_video.mp4").read_bytes()
+    client = app.test_client()
+    form = {"cover_type":"video", "num_lsb":"8", "start_mode":"manual", "manual_offset":"100"}
+    enc = client.post("/api/encode", data=form | {"payload_type":"text", "payload_text":"Hello Bob",
+                                                  "cover_file":(io.BytesIO(video),"cover.mp4")})
+    assert enc.status_code == 200, enc.json
+    stego = base64.b64decode(enc.json["stego_base64"])
+    # MP4 with lossless FLAC audio, so browsers can play it and the LSBs survive.
+    assert (enc.json["stego_filename"], enc.json["mime"], stego[4:8]) == ("stego_video.mp4", "video/mp4", b"ftyp")
+    dec = client.post("/api/decode", data=form | {"public_key_pem":keys.decode(),
+                                                  "stego_file":(io.BytesIO(stego),"stego_video.mp4")}).json
+    assert dec["verdict"] == "Authentic" and base64.b64decode(dec["data_base64"]) == b"Hello Bob"
+
+    listen = client.post("/api/compare", data={"cover_type":"video", "original_file":(io.BytesIO(video),"cover.mp4"),
+                                               "stego_file":(io.BytesIO(stego),"stego_video.mp4")}).json["listening"]
+    assert listen["gain"] >= 1 and listen["difference_gain"] > listen["gain"]
+    for name in ("original_wav_base64", "stego_wav_base64", "difference_wav_base64"):
+        assert base64.b64decode(listen[name])[:4] == b"RIFF"
+
+
 def test_audio_32_bit(covers, keys):
     args = encode_args("audio", wav(width=4), num_lsb=8, hash_algorithm="SHA-512")
     enc = pipeline.encode(**args)

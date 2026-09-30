@@ -371,9 +371,9 @@ def encode(
     except VideoError as exc:
         raise StegoError(str(exc)) from exc
 
+    extension, result.mime = video_lsb.container_of(stego_video_bytes)
     result.stego_bytes = stego_video_bytes
-    result.stego_filename = stego_out_name
-    result.mime = "video/x-matroska"
+    result.stego_filename = f"{stego_out_name.rsplit('.', 1)[0]}.{extension}"
     result.cover_info = _mark_as_video({**video_info, **result.cover_info})
     return result
 

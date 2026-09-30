@@ -435,6 +435,9 @@ th { color: var(--text-dim); font-weight: 600; }
 .comparison-stage p { font-size: .73rem; }
 .content-text { white-space: pre-wrap; overflow: auto; max-height: 200px; text-align: left; width: 100%; padding: 10px; font-size: .8rem; }
 .chart-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; }
+.listen-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 14px; margin-top: 10px; }
+.listen-item p { font-size: .8rem; font-weight: 600; margin-bottom: 6px; }
+.listen-item audio { width: 100%; }
 .chart-container { min-width: 0; }
 .chart-container p { font-size: .8rem; font-weight: 600; }
 canvas { width: 100%; height: auto; display: block; }
