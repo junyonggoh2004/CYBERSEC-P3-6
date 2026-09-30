@@ -1,0 +1,142 @@
+{
+  "source_commit": "406d4c0",
+  "case_count": 16,
+  "sections": [
+    {
+      "title": "A. Your four complete positive demonstrations",
+      "intro": "Run Protect \u2192 Verify \u2192 Compare for each row. D1\u2013D4 are the only payload/cover combinations in scope.",
+      "cases": [
+        {
+          "id": "D1",
+          "description": "Short text payload \u2192 PNG cover",
+          "files": "Cover: samples/covers/astronaut.png; payload: Short example button in Text message mode.",
+          "steps": "Depth 1; manual offset 100; complete all three phases.",
+          "expected": "Protect fits; output stego_image.png. Verify Authentic and exact short text. Image Compare succeeds; max difference \u22641; histograms/difference views render."
+        },
+        {
+          "id": "D2",
+          "description": "Longer text payload \u2192 WAV cover",
+          "files": "Cover: samples/audio/sample-006.wav; payload: Long example button (or paste samples/text/sample-019.txt).",
+          "steps": "Depth 2; manual offset 100; complete all three phases.",
+          "expected": "Protected package fits within 3975 B with defaults; output stego_audio.wav. Verify Authentic and full message preserved. Audio Compare succeeds; max sample difference \u22643; waveform/SNR evidence."
+        },
+        {
+          "id": "D3",
+          "description": "WAV audio payload \u2192 PNG cover",
+          "files": "Cover: samples/covers/astronaut.png; File payload: samples/audio/sample-002.wav.",
+          "steps": "Depth 1; manual offset 100; review 24044 B payload plus overhead before creation; complete three phases.",
+          "expected": "Fits within 98291 B; PNG output; Verify Authentic and exact recovered WAV, audio preview/download available. Image Compare succeeds; max difference \u22641."
+        },
+        {
+          "id": "D4",
+          "description": "PNG image payload \u2192 WAV cover",
+          "files": "Cover: samples/audio/sample-006.wav; File payload: samples/images/sample-001.png.",
+          "steps": "Depth 4; manual offset 100; complete all three phases.",
+          "expected": "2650 B PNG plus overhead fits within 7950 B; WAV output; Verify Authentic and exact recovered PNG with image preview/download. Audio Compare succeeds; max difference \u226415."
+        }
+      ]
+    },
+    {
+      "title": "B. Four focused Protect/settings checks",
+      "intro": "These reuse the same four combinations. Save alternate valid outputs separately; do not overwrite the baseline files.",
+      "cases": [
+        {
+          "id": "P1",
+          "description": "D3: cover too small, then sufficient depth",
+          "files": "Cover: samples/images/sample-001.png; WAV payload: samples/audio/sample-002.wav.",
+          "steps": "Review depth 1/index 100; then depth 3/index 100. Create and Verify the depth-3 output if it fits.",
+          "expected": "Depth 1: no fit (10019 B capacity <24044 B payload even before overhead); create disabled. Depth 3: 30058 B capacity, expected fit with defaults; selected depth retained; Verify Authentic at depth 3."
+        },
+        {
+          "id": "P2",
+          "description": "D4: insufficient LSB capacity, then correct depth",
+          "files": "Original D4 cover/payload.",
+          "steps": "Review at depth 1/index 100; then depth 4.",
+          "expected": "Depth 1 fails (1987 B <2650 B payload); create disabled/no silent depth change. Depth 4 fits; Verify with depth 4 returns Authentic."
+        },
+        {
+          "id": "P3",
+          "description": "D1: alternate LSB depth and start index",
+          "files": "Original D1 cover/short text.",
+          "steps": "Protect at depth 2/index 200; Review/create; manually Verify depth 2/index 200; Compare.",
+          "expected": "Fits, retains 2 LSBs and index 200; Authentic; Compare max difference \u22643. Demonstrates offset and depth must agree on both sides."
+        },
+        {
+          "id": "P4",
+          "description": "D1: end-of-cover and out-of-range start",
+          "files": "Original D1 cover/short text, depth 1.",
+          "steps": "Review index 786431 (last valid channel), then 786432 (outside carrier). Restore 100 afterward.",
+          "expected": "786431: valid index but insufficient capacity/no fit. 786432: outside-cover-range error (0..786431). Neither creates a new stego object; no crash."
+        }
+      ]
+    },
+    {
+      "title": "C. Five focused Verify negative checks",
+      "intro": "Use saved baselines and change only one variable. Each test must produce a non-Authentic result. Restore correct settings/key/file afterward.",
+      "cases": [
+        {
+          "id": "V1",
+          "description": "D2: wrong extraction depth",
+          "files": "Saved original D2 stego WAV; matching Alice public key.",
+          "steps": "Verify depth 1/index 100 instead of encoded depth 2. Then restore depth 2.",
+          "expected": "Wrong depth: normally Payload Missing / NO_RECOGNISED_PAYLOAD; accidental recognizable marker could lead Cannot Verify, but not Authentic. Restored depth 2: Authentic."
+        },
+        {
+          "id": "V2",
+          "description": "D3: wrong extraction start",
+          "files": "Saved original D3 stego PNG; matching public key.",
+          "steps": "Verify depth 1/index 101 or 1000 instead of 100. Then restore 100.",
+          "expected": "Wrong offset normally Payload Missing / NO_RECOGNISED_PAYLOAD; marker cannot be read. Restore 100: Authentic. Do not expect a distinct Wrong Start Location verdict."
+        },
+        {
+          "id": "V3",
+          "description": "D4: wrong Alice public key",
+          "files": "Saved original D4 stego WAV.",
+          "steps": "Correct depth 4/index 100; click Use wrong key (negative case); verify. Reload matching public key and verify again.",
+          "expected": "Wrong key: Signature Invalid / SIGNATURE_INVALID; decryption/hashes may still pass; any displayed recovered image is untrusted. Correct key: Authentic."
+        },
+        {
+          "id": "V4",
+          "description": "D1: protected cover-bit tampering",
+          "files": "Recreate D1 so it is LAST CREATED; trusted public key.",
+          "steps": "Click Alter cover value; Verify modified copy at depth 1/manual 100. Then Restore original stego and verify again.",
+          "expected": "Modified copy: Tampered / COVER_HASH_MISMATCH; signature/content hash/decryption pass; cover check fails. Restored original: Authentic."
+        },
+        {
+          "id": "V5",
+          "description": "D2: hidden encrypted-package tampering",
+          "files": "Recreate D2 so it is LAST CREATED; trusted public key.",
+          "steps": "Click Alter hidden content; Verify modified copy at depth 2/manual 100. Restore original stego and verify again.",
+          "expected": "Modified copy: Cannot Verify / DECRYPTION_FAILED; no recovered content because AES-GCM fails. This is not expected to be Tampered. Restored original: Authentic."
+        }
+      ]
+    },
+    {
+      "title": "D. Three focused Compare checks",
+      "intro": "The positive comparisons are already part of D1\u2013D4; only these additional edge cases are needed.",
+      "cases": [
+        {
+          "id": "C1",
+          "description": "Wrong image original: dimension mismatch",
+          "files": "Original field: samples/covers/chelsea.png; stego field: saved D1 stego PNG.",
+          "steps": "Compare objects; then replace original with astronaut.png and compare again.",
+          "expected": "Wrong pair rejected: Objects must have matching dimensions/channels or audio format/duration. Correct original: successful D1 comparison."
+        },
+        {
+          "id": "C2",
+          "description": "Wrong audio original: format/duration mismatch",
+          "files": "Original field: samples/audio/sample-002.wav; stego field: saved D2 stego WAV.",
+          "steps": "Compare objects; then replace original with sample-006.wav and compare again.",
+          "expected": "Wrong pair rejected with same matching-properties message; rates/frame counts differ. Correct original: successful audio comparison."
+        },
+        {
+          "id": "C3",
+          "description": "Identical-object comparison sanity check",
+          "files": "samples/covers/astronaut.png in BOTH fields; optionally repeat sample-006.wav in both fields.",
+          "steps": "Compare identical objects.",
+          "expected": "Changed values=0, changed%=0, MSE=0, max difference=0; PSNR shows Identical. Optional audio: SNR inf (stego is identical to the cover). No authenticity verdict is inferred."
+        }
+      ]
+    }
+  ]
+}

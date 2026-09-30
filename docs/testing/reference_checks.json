@@ -1,0 +1,2014 @@
+{
+  "scope": "Backend API checks with isolated ephemeral keys; not GUI/manual execution results.",
+  "passed": 102,
+  "failed": 0,
+  "checks": [
+    {
+      "id": "POS-PNG-01",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 24563,
+        "required_units": 10480,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.026824951171875,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-PNG-02",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 672,
+        "package_bytes": 1877,
+        "capacity_bytes": 24563,
+        "required_units": 15016,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.038304646809895836,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-PNG-03",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 56,
+        "package_bytes": 1260,
+        "capacity_bytes": 24563,
+        "required_units": 10080,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.025639851888020832,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-PNG-04",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 158,
+        "package_bytes": 1377,
+        "capacity_bytes": 24563,
+        "required_units": 11016,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.027745564778645832,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-PNG-05",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 54,
+        "package_bytes": 1270,
+        "capacity_bytes": 24563,
+        "required_units": 10160,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.025960286458333332,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-PNG-06",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 24,
+        "package_bytes": 1236,
+        "capacity_bytes": 24563,
+        "required_units": 9888,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.02496337890625,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-PNG-07",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 28,
+        "package_bytes": 1249,
+        "capacity_bytes": 24563,
+        "required_units": 9992,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.025543212890625,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-PNG-08",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 90,
+        "package_bytes": 1311,
+        "capacity_bytes": 24563,
+        "required_units": 10488,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.026392618815104168,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-PNG-09",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 556,
+        "package_bytes": 1778,
+        "capacity_bytes": 24563,
+        "required_units": 14224,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.0359344482421875,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-PNG-10",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 539,
+        "package_bytes": 1762,
+        "capacity_bytes": 24563,
+        "required_units": 14096,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.035471598307291664,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-PNG-11",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 911,
+        "package_bytes": 2133,
+        "capacity_bytes": 24563,
+        "required_units": 17064,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.043156941731770836,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-PNG-1",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 24563,
+        "required_units": 10480,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.026875813802083332,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-PNG-2",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 49127,
+        "required_units": 5240,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 3.0,
+        "comparison_mse": 0.06775919596354167,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-PNG-3",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 73690,
+        "required_units": 3494,
+        "padding_bits": 2,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 7.0,
+        "comparison_mse": 0.19399007161458334,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-PNG-4",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 98254,
+        "required_units": 2620,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 15.0,
+        "comparison_mse": 0.5566762288411459,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-PNG-5",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 122817,
+        "required_units": 2098,
+        "padding_bits": 10,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 31.0,
+        "comparison_mse": 1.8072255452473958,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-PNG-6",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 147381,
+        "required_units": 1748,
+        "padding_bits": 8,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 63.0,
+        "comparison_mse": 6.0587158203125,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-PNG-7",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 171944,
+        "required_units": 1498,
+        "padding_bits": 6,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 125.0,
+        "comparison_mse": 20.807861328125,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-PNG-8",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 196508,
+        "required_units": 1310,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 250.0,
+        "comparison_mse": 68.90925598144531,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LARGE-PNG-6",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 123073,
+        "package_bytes": 124305,
+        "capacity_bytes": 147381,
+        "required_units": 165742,
+        "padding_bits": 12,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 63.0,
+        "comparison_mse": 577.8047231038412,
+        "hash_algorithm": "SHA-256",
+        "preceding_depth_fits": false
+      }
+    },
+    {
+      "id": "LARGE-PNG-7",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 147637,
+        "package_bytes": 148869,
+        "capacity_bytes": 171944,
+        "required_units": 170137,
+        "padding_bits": 7,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 127.0,
+        "comparison_mse": 2360.1644287109375,
+        "hash_algorithm": "SHA-256",
+        "preceding_depth_fits": false
+      }
+    },
+    {
+      "id": "LARGE-PNG-8",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 172200,
+        "package_bytes": 173432,
+        "capacity_bytes": 196508,
+        "required_units": 173432,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 255.0,
+        "comparison_mse": 9616.211878458658,
+        "hash_algorithm": "SHA-256",
+        "preceding_depth_fits": false
+      }
+    },
+    {
+      "id": "POS-WAV-01",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 5500,
+        "required_units": 10480,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.11680272108843537,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-WAV-02",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 672,
+        "package_bytes": 1877,
+        "capacity_bytes": 5500,
+        "required_units": 15016,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.17238095238095238,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-WAV-03",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 56,
+        "package_bytes": 1260,
+        "capacity_bytes": 5500,
+        "required_units": 10080,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.11308390022675736,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-WAV-04",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 158,
+        "package_bytes": 1377,
+        "capacity_bytes": 5500,
+        "required_units": 11016,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.1247392290249433,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-WAV-05",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 54,
+        "package_bytes": 1270,
+        "capacity_bytes": 5500,
+        "required_units": 10160,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.11480725623582766,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-WAV-06",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 24,
+        "package_bytes": 1236,
+        "capacity_bytes": 5500,
+        "required_units": 9888,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.11147392290249433,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-WAV-07",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 28,
+        "package_bytes": 1249,
+        "capacity_bytes": 5500,
+        "required_units": 9992,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.11351473922902494,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-WAV-08",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 90,
+        "package_bytes": 1311,
+        "capacity_bytes": 5500,
+        "required_units": 10488,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.11895691609977324,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-WAV-09",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 556,
+        "package_bytes": 1778,
+        "capacity_bytes": 5500,
+        "required_units": 14224,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.16006802721088437,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-WAV-10",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 539,
+        "package_bytes": 1762,
+        "capacity_bytes": 5500,
+        "required_units": 14096,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.15941043083900228,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-WAV-11",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 911,
+        "package_bytes": 2133,
+        "capacity_bytes": 5500,
+        "required_units": 17064,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.1946031746031746,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-WAV-1",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 5500,
+        "required_units": 10480,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.11918367346938775,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-WAV-2",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 11000,
+        "required_units": 5240,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 3.0,
+        "comparison_mse": 0.2940589569160998,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-WAV-3",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 16500,
+        "required_units": 3494,
+        "padding_bits": 2,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 7.0,
+        "comparison_mse": 0.8470748299319728,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-WAV-4",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 22000,
+        "required_units": 2620,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 15.0,
+        "comparison_mse": 2.552063492063492,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-WAV-5",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 27500,
+        "required_units": 2098,
+        "padding_bits": 10,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 31.0,
+        "comparison_mse": 8.082176870748299,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-WAV-6",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 33000,
+        "required_units": 1748,
+        "padding_bits": 8,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 62.0,
+        "comparison_mse": 26.446598639455782,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-WAV-7",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 38500,
+        "required_units": 1498,
+        "padding_bits": 6,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 126.0,
+        "comparison_mse": 89.78385487528345,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-WAV-8",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 44000,
+        "required_units": 1310,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 251.0,
+        "comparison_mse": 345.3000453514739,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LARGE-WAV-6",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 27756,
+        "package_bytes": 28987,
+        "capacity_bytes": 33000,
+        "required_units": 38651,
+        "padding_bits": 10,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 63.0,
+        "comparison_mse": 593.0434467120182,
+        "hash_algorithm": "SHA-256",
+        "preceding_depth_fits": false
+      }
+    },
+    {
+      "id": "LARGE-WAV-7",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 33256,
+        "package_bytes": 34487,
+        "capacity_bytes": 38500,
+        "required_units": 39415,
+        "padding_bits": 9,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 127.0,
+        "comparison_mse": 2380.5354421768707,
+        "hash_algorithm": "SHA-256",
+        "preceding_depth_fits": false
+      }
+    },
+    {
+      "id": "LARGE-WAV-8",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 38756,
+        "package_bytes": 39987,
+        "capacity_bytes": 44000,
+        "required_units": 39987,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 255.0,
+        "comparison_mse": 9786.73022675737,
+        "hash_algorithm": "SHA-256",
+        "preceding_depth_fits": false
+      }
+    },
+    {
+      "id": "POS-MP4-01",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 5619,
+        "required_units": 10480,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.11763139204545454,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-MP4-02",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 672,
+        "package_bytes": 1877,
+        "capacity_bytes": 5619,
+        "required_units": 15016,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.16876775568181818,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-MP4-03",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 56,
+        "package_bytes": 1260,
+        "capacity_bytes": 5619,
+        "required_units": 10080,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.11345880681818182,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-MP4-04",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 158,
+        "package_bytes": 1377,
+        "capacity_bytes": 5619,
+        "required_units": 11016,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.12326882102272728,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-MP4-05",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 54,
+        "package_bytes": 1270,
+        "capacity_bytes": 5619,
+        "required_units": 10160,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.11294833096590909,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-MP4-06",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 24,
+        "package_bytes": 1236,
+        "capacity_bytes": 5619,
+        "required_units": 9888,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.11028497869318182,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-MP4-07",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 28,
+        "package_bytes": 1249,
+        "capacity_bytes": 5619,
+        "required_units": 9992,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.11101740056818182,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-MP4-08",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 90,
+        "package_bytes": 1311,
+        "capacity_bytes": 5619,
+        "required_units": 10488,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.11443536931818182,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-MP4-09",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 556,
+        "package_bytes": 1778,
+        "capacity_bytes": 5619,
+        "required_units": 14224,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.15931285511363635,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-MP4-10",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 539,
+        "package_bytes": 1762,
+        "capacity_bytes": 5619,
+        "required_units": 14096,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.15573952414772727,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "POS-MP4-11",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 911,
+        "package_bytes": 2133,
+        "capacity_bytes": 5619,
+        "required_units": 17064,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.19309303977272727,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-MP4-1",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 5619,
+        "required_units": 10480,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 1.0,
+        "comparison_mse": 0.11574485085227272,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-MP4-2",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 11239,
+        "required_units": 5240,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 3.0,
+        "comparison_mse": 0.2996493252840909,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-MP4-3",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 16858,
+        "required_units": 3494,
+        "padding_bits": 2,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 7.0,
+        "comparison_mse": 0.7985395951704546,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-MP4-4",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 22478,
+        "required_units": 2620,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 15.0,
+        "comparison_mse": 2.4660200639204546,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-MP4-5",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 28097,
+        "required_units": 2098,
+        "padding_bits": 10,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 31.0,
+        "comparison_mse": 8.169677734375,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-MP4-6",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 33717,
+        "required_units": 1748,
+        "padding_bits": 8,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 63.0,
+        "comparison_mse": 26.27889737215909,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-MP4-7",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 39336,
+        "required_units": 1498,
+        "padding_bits": 6,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 124.0,
+        "comparison_mse": 90.38350053267045,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LSB-MP4-8",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1310,
+        "capacity_bytes": 44956,
+        "required_units": 1310,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 245.0,
+        "comparison_mse": 316.6263982599432,
+        "hash_algorithm": "SHA-256"
+      }
+    },
+    {
+      "id": "LARGE-MP4-6",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 28353,
+        "package_bytes": 29586,
+        "capacity_bytes": 33717,
+        "required_units": 39450,
+        "padding_bits": 12,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 63.0,
+        "comparison_mse": 601.4672185724431,
+        "hash_algorithm": "SHA-256",
+        "preceding_depth_fits": false
+      }
+    },
+    {
+      "id": "LARGE-MP4-7",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 33973,
+        "package_bytes": 35206,
+        "capacity_bytes": 39336,
+        "required_units": 40237,
+        "padding_bits": 11,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 127.0,
+        "comparison_mse": 2441.0805886008525,
+        "hash_algorithm": "SHA-256",
+        "preceding_depth_fits": false
+      }
+    },
+    {
+      "id": "LARGE-MP4-8",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 39592,
+        "package_bytes": 40825,
+        "capacity_bytes": 44956,
+        "required_units": 40825,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 254.0,
+        "comparison_mse": 9963.495094992897,
+        "hash_algorithm": "SHA-256",
+        "preceding_depth_fits": false
+      }
+    },
+    {
+      "id": "VER-PNG-01",
+      "status": "passed",
+      "details": {
+        "verdict": "Payload Missing",
+        "reason": "NO_RECOGNISED_PAYLOAD"
+      }
+    },
+    {
+      "id": "VER-PNG-02-offset-101",
+      "status": "passed",
+      "details": {
+        "verdict": "Payload Missing",
+        "reason": "NO_RECOGNISED_PAYLOAD"
+      }
+    },
+    {
+      "id": "VER-PNG-02-offset-1000",
+      "status": "passed",
+      "details": {
+        "verdict": "Payload Missing",
+        "reason": "NO_RECOGNISED_PAYLOAD"
+      }
+    },
+    {
+      "id": "VER-PNG-03",
+      "status": "passed",
+      "details": {
+        "verdict": "Signature Invalid",
+        "reason": "SIGNATURE_INVALID",
+        "payload_returned": true
+      }
+    },
+    {
+      "id": "VER-PNG-04",
+      "status": "passed",
+      "details": {
+        "verdict": "Cannot Verify",
+        "reason": "DECRYPTION_FAILED",
+        "payload_returned": false
+      }
+    },
+    {
+      "id": "VER-PNG-05",
+      "status": "passed",
+      "details": {
+        "verdict": "Tampered",
+        "reason": "COVER_HASH_MISMATCH",
+        "payload_returned": true
+      }
+    },
+    {
+      "id": "VER-PNG-06",
+      "status": "passed",
+      "details": {
+        "verdict": "Payload Missing",
+        "reason": "NO_RECOGNISED_PAYLOAD"
+      }
+    },
+    {
+      "id": "VER-WAV-01",
+      "status": "passed",
+      "details": {
+        "verdict": "Payload Missing",
+        "reason": "NO_RECOGNISED_PAYLOAD"
+      }
+    },
+    {
+      "id": "VER-WAV-02-offset-101",
+      "status": "passed",
+      "details": {
+        "verdict": "Payload Missing",
+        "reason": "NO_RECOGNISED_PAYLOAD"
+      }
+    },
+    {
+      "id": "VER-WAV-02-offset-1000",
+      "status": "passed",
+      "details": {
+        "verdict": "Payload Missing",
+        "reason": "NO_RECOGNISED_PAYLOAD"
+      }
+    },
+    {
+      "id": "VER-WAV-03",
+      "status": "passed",
+      "details": {
+        "verdict": "Signature Invalid",
+        "reason": "SIGNATURE_INVALID",
+        "payload_returned": true
+      }
+    },
+    {
+      "id": "VER-WAV-04",
+      "status": "passed",
+      "details": {
+        "verdict": "Cannot Verify",
+        "reason": "DECRYPTION_FAILED",
+        "payload_returned": false
+      }
+    },
+    {
+      "id": "VER-WAV-05",
+      "status": "passed",
+      "details": {
+        "verdict": "Tampered",
+        "reason": "COVER_HASH_MISMATCH",
+        "payload_returned": true
+      }
+    },
+    {
+      "id": "VER-WAV-06",
+      "status": "passed",
+      "details": {
+        "verdict": "Payload Missing",
+        "reason": "NO_RECOGNISED_PAYLOAD"
+      }
+    },
+    {
+      "id": "VER-MP4-01",
+      "status": "passed",
+      "details": {
+        "verdict": "Payload Missing",
+        "reason": "NO_RECOGNISED_PAYLOAD"
+      }
+    },
+    {
+      "id": "VER-MP4-02-offset-101",
+      "status": "passed",
+      "details": {
+        "verdict": "Payload Missing",
+        "reason": "NO_RECOGNISED_PAYLOAD"
+      }
+    },
+    {
+      "id": "VER-MP4-02-offset-1000",
+      "status": "passed",
+      "details": {
+        "verdict": "Payload Missing",
+        "reason": "NO_RECOGNISED_PAYLOAD"
+      }
+    },
+    {
+      "id": "VER-MP4-03",
+      "status": "passed",
+      "details": {
+        "verdict": "Signature Invalid",
+        "reason": "SIGNATURE_INVALID",
+        "payload_returned": true
+      }
+    },
+    {
+      "id": "VER-MP4-04",
+      "status": "passed",
+      "details": {
+        "verdict": "Cannot Verify",
+        "reason": "DECRYPTION_FAILED",
+        "payload_returned": false
+      }
+    },
+    {
+      "id": "VER-MP4-05",
+      "status": "passed",
+      "details": {
+        "verdict": "Tampered",
+        "reason": "COVER_HASH_MISMATCH",
+        "payload_returned": true
+      }
+    },
+    {
+      "id": "VER-MP4-06",
+      "status": "passed",
+      "details": {
+        "verdict": "Payload Missing",
+        "reason": "NO_RECOGNISED_PAYLOAD"
+      }
+    },
+    {
+      "id": "VER-EDGE-12",
+      "status": "passed",
+      "details": {
+        "verdict": "Authentic",
+        "mutation": "low bit of value 0 outside package"
+      }
+    },
+    {
+      "id": "VER-EDGE-10",
+      "status": "passed",
+      "details": {
+        "verdict": "Payload Missing",
+        "reason": "NO_RECOGNISED_PAYLOAD"
+      }
+    },
+    {
+      "id": "API-04",
+      "status": "passed",
+      "details": {
+        "verdict": "Cannot Verify",
+        "reason": "DECRYPTION_FAILED"
+      }
+    },
+    {
+      "id": "SHA512-PNG",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1406,
+        "capacity_bytes": 49127,
+        "required_units": 5624,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 3.0,
+        "comparison_mse": 0.0722198486328125,
+        "hash_algorithm": "SHA-512"
+      }
+    },
+    {
+      "id": "SHA512-WAV",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1406,
+        "capacity_bytes": 11000,
+        "required_units": 5624,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 3.0,
+        "comparison_mse": 0.30945578231292514,
+        "hash_algorithm": "SHA-512"
+      }
+    },
+    {
+      "id": "SHA512-MP4",
+      "status": "passed",
+      "details": {
+        "fits": true,
+        "content_bytes": 105,
+        "package_bytes": 1406,
+        "capacity_bytes": 11239,
+        "required_units": 5624,
+        "padding_bits": 0,
+        "verdict": "Authentic",
+        "checks": {
+          "cover_integrity": "Passed",
+          "decryption": "Passed",
+          "extraction": "Passed",
+          "payload_integrity": "Passed",
+          "record_binding": "Passed",
+          "signature": "Passed"
+        },
+        "exact_payload": true,
+        "comparison_max": 3.0,
+        "comparison_mse": 0.30750621448863635,
+        "hash_algorithm": "SHA-512"
+      }
+    },
+    {
+      "id": "NO-AUDIO-no_audio.mp4",
+      "status": "passed",
+      "details": {
+        "error": "This video has no audio track to embed a payload into. Choose a video that includes audio, or use an image/audio cover instead."
+      }
+    },
+    {
+      "id": "NO-AUDIO-sample-001.avi",
+      "status": "passed",
+      "details": {
+        "error": "This video has no audio track to embed a payload into. Choose a video that includes audio, or use an image/audio cover instead."
+      }
+    },
+    {
+      "id": "CMP-MISMATCH-mismatch_dimensions.png",
+      "status": "passed",
+      "details": {
+        "error": "Objects must have matching dimensions/channels or audio format/duration."
+      }
+    },
+    {
+      "id": "CMP-MISMATCH-mismatch_duration.wav",
+      "status": "passed",
+      "details": {
+        "error": "Objects must have matching dimensions/channels or audio format/duration."
+      }
+    },
+    {
+      "id": "CMP-MISMATCH-mismatch_rate.wav",
+      "status": "passed",
+      "details": {
+        "error": "Objects must have matching dimensions/channels or audio format/duration."
+      }
+    },
+    {
+      "id": "CMP-MISMATCH-mismatch_channels.wav",
+      "status": "passed",
+      "details": {
+        "error": "Objects must have matching dimensions/channels or audio format/duration."
+      }
+    },
+    {
+      "id": "CMP-IDENTICAL-PNG",
+      "status": "passed",
+      "details": {
+        "mse": 0.0,
+        "changed_values": 0,
+        "psnr_db": null,
+        "snr": null
+      }
+    },
+    {
+      "id": "CMP-IDENTICAL-WAV",
+      "status": "passed",
+      "details": {
+        "mse": 0.0,
+        "changed_values": 0,
+        "psnr_db": null,
+        "snr": "inf (stego is identical to the cover)"
+      }
+    },
+    {
+      "id": "CMP-IDENTICAL-MP4",
+      "status": "passed",
+      "details": {
+        "mse": 0.0,
+        "changed_values": 0,
+        "psnr_db": null,
+        "snr": "inf (stego is identical to the cover)"
+      }
+    }
+  ]
+}
