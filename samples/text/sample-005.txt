@@ -1,3 +1,0 @@
-StegaSure sample message 05
-Hash the recovered payload and compare its signed digest.
-Hash the recovered payload and compare its signed digest.

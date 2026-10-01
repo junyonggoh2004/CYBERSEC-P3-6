@@ -1,3 +1,0 @@
-StegaSure sample message 01
-Hash the recovered payload and compare its signed digest.
-Verify the signer with a public key received through a trusted channel.
