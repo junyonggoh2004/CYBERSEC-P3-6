@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from time import perf_counter
 
 from . import audio_lsb, crypto_utils, image_lsb, payload, start_location, video_lsb, encryption
-from .bitstream import StegoStream, capacity_units, validate_num_lsb
+from .bitstream import StegoStream, capacity_units, max_lsb, validate_num_lsb
 from .payload import VerificationError
 from .video_lsb import VideoError
 
@@ -85,6 +85,7 @@ def _capacity_check_core(
     num_lsb = validate_num_lsb(num_lsb)
     carrier = _load_carrier(cover_type, cover_bytes)
     arr = _carrier_array(cover_type, carrier)
+    validate_num_lsb(num_lsb, arr)
     start_index, _ = _resolve_start(cover_type, carrier, num_lsb, start_mode, manual_offset, passphrase)
     cap_bytes = ((len(arr) - start_index) * num_lsb) // 8
     return CapacityInfo(
@@ -137,6 +138,7 @@ def _encode_core(
 
     carrier = _load_carrier(cover_type, cover_bytes)
     arr = _carrier_array(cover_type, carrier)
+    validate_num_lsb(num_lsb, arr)
 
     try:
         start_index, stable_hash = _resolve_start(
@@ -227,6 +229,7 @@ def _decode_core(
     try:
         num_lsb = validate_num_lsb(num_lsb)
         carrier = _load_carrier(cover_type, stego_bytes)
+        validate_num_lsb(num_lsb, _carrier_array(cover_type, carrier))
     except Exception as exc:  # malformed/unsupported file - never crash the server
         return DecodeResult(verdict="Cannot Verify", detail=str(exc), start_index=None, cover_info={},
                             evidence={"reason_code": "INVALID_MEDIA_OR_DEPTH", "extraction_status": "Not run"}, **empty)
@@ -401,10 +404,11 @@ def _prepare_core(cover_type, cover_bytes, data, payload_type="text", filename=N
         raise ValueError("Team metadata must be a JSON object.")
     carrier = _load_carrier(cover_type, cover_bytes)
     arr = carrier.array
+    validate_num_lsb(num_lsb, arr)
     info = _describe(cover_type, carrier)
     key = crypto_utils.signing_key(key_id)
     choices, selected = [], None
-    for depth in range(1, 9):
+    for depth in range(1, max_lsb(arr) + 1):
         index, _ = _resolve_start(cover_type, carrier, depth, start_mode, manual_offset, passphrase)
         built = payload.build_container(data, payload_type, media_id, filename, mime,
             team_metadata or {}, crypto_utils.stable_cover_hash(arr, depth, hash_algorithm, info),

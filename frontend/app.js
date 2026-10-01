@@ -145,11 +145,22 @@ $("key-import-form").onsubmit=run(async e=>{
   const key=await api("/api/keys/import",data); $("key-password").value=""; $("private-file").value=""; await loadKeys(key.key_id); notice("Signing pair imported and retained.");
 });
 
+// An image-channel value has 8 bits; a PCM sample (audio, or a video's audio
+// track) has 16, so audio/video allow up to 16 LSBs. Matches bitstream.max_lsb.
+const maxDepth = kind => kind === "image" ? 8 : 16;
+function setDepthOptions(id, kind) {
+  const select=$(id), max=maxDepth(kind), value=Math.min(Number(select.value)||1,max);
+  if(select.options.length!==max) select.replaceChildren(...Array.from({length:max},(_,i)=>new Option(String(i+1))));
+  select.value=String(value);
+}
 function updateBits() {
-  const depth=Number($("lsb").value);
-  $("bits").innerHTML=Array.from("10110110",(bit,i)=>'<span class="bit '+(i>=8-depth?"selected":"")+'">'+bit+"</span>").join("");
-  $("bit-explanation").textContent=depth+" lowest bit"+(depth===1?"":"s")+" replaced per value. Example: 100 available values × "+depth+" = "+(100*depth)+" bits. A 240-bit package "+(100*depth>=240?"fits.":"does not fit.");
-  $("scope-note").textContent="Stable-cover hashing excludes these low bits. Start-location derivation uses SHA-256 regardless of the content-hash selection."+ (depth===8&&kindOf($("cover-file").files[0])==="image"?" At 8 LSBs, no image-channel value bits remain protected by the stable hash.":"");
+  const kind=kindOf($("cover-file").files[0]), depth=Number($("lsb").value), width=kind==="image"?8:16;
+  const example=width===8?"10110110":"0010110110110110";
+  $("bits").innerHTML=Array.from(example,(bit,i)=>'<span class="bit '+(i>=width-depth?"selected":"")+'">'+bit+"</span>").join("");
+  $("bit-explanation").textContent=depth+" lowest bit"+(depth===1?"":"s")+" replaced per "+(width===8?"value":"16-bit sample")+". Example: 100 available values × "+depth+" = "+(100*depth)+" bits. A 240-bit package "+(100*depth>=240?"fits.":"does not fit.")
+    +(width===16&&depth>8?" Above 8 LSBs the hidden data becomes audible noise.":"");
+  $("scope-note").textContent="Stable-cover hashing excludes these low bits. Start-location derivation uses SHA-256 regardless of the content-hash selection."
+    +(depth===width?" At "+depth+" LSBs, no "+(width===8?"image-channel value":"sample")+" bits remain protected by the stable hash.":"");
 }
 // Any cover can carry any of these; the payload type is inferred from the
 // dropped file rather than chosen from a separate dropdown. "file" is a text
@@ -164,7 +175,7 @@ function contentKind(file) {
   const ext=(file?.name.match(/\.([^.]+)$/)||[])[1]?.toLowerCase();
   return Object.keys(CONTENT_EXTENSIONS).find(kind=>CONTENT_EXTENSIONS[kind].includes(ext)) || null;
 }
-function updateContent() { updatePayloadMode(); updateBits(); }
+function updateContent() { setDepthOptions("lsb",kindOf($("cover-file").files[0])); updatePayloadMode(); updateBits(); }
 function updatePayloadMode() {
   const text=state.payloadMode!=="file";
   $("text-content").hidden=!text; $("file-content").hidden=text; $("payload-preview").hidden=text;
@@ -233,7 +244,7 @@ async function prepare() {
   state.prepared=result;
   $("protect-button").disabled=!result.fits||state.busy;
   $("prepare-status").textContent=result.fits?"The complete signed package fits. Your LSB selection will be used unchanged.":"The complete package does not fit. Increase depth, reduce content, change cover or adjust the start location.";
-  metrics("capacity-metrics",[["Content",bytes(result.content_size_bytes)],["Complete package",bytes(result.container_size_bytes)],["Available",bytes(result.capacity_bytes)],["Space used",result.utilisation_percent+"%"],["Minimum sufficient depth",result.minimum_sufficient_depth ?? "Does not fit at 1–8"]]);
+  metrics("capacity-metrics",[["Content",bytes(result.content_size_bytes)],["Complete package",bytes(result.container_size_bytes)],["Available",bytes(result.capacity_bytes)],["Space used",result.utilisation_percent+"%"],["Minimum sufficient depth",result.minimum_sufficient_depth ?? "Does not fit at 1–"+result.choices.length]]);
   $("capacity-bar").value=Math.min(100,result.utilisation_percent);
   $("cover-properties").textContent=Object.entries(result.cover_info).map(([k,v])=>k.replaceAll("_"," ")+": "+v).join(" · ");
   $("record-preview").textContent=pretty({record:result.metadata,payload_hash:result.payload_hash_hex,signature:result.signature_hex});
@@ -262,7 +273,7 @@ function useForVerify(file) {
   if(!state.latest)throw new Error("Protect a file first.");
   state.received=file||state.latest.file; $("received-file").required=false;
   $("received-file").value=""; dropzones.received.refresh(state.received); const settings=state.latest.settings;
-  $("verify-lsb").value=settings.num_lsb; $("verify-mode").value=settings.start_mode;
+  setDepthOptions("verify-lsb",settings.cover_type); $("verify-lsb").value=settings.num_lsb; $("verify-mode").value=settings.start_mode;
   $("verify-offset").value=settings.manual_offset; $("verify-secret").value=settings.passphrase;
   updateStart("verify"); preview("received-preview",state.received,undefined,false); invalidateVerification();
   location.hash="verify";
@@ -273,7 +284,7 @@ $("verify-form").addEventListener("input",invalidateVerification);
 $("verify-form").addEventListener("change",invalidateVerification);
 $("use-for-verify").onclick=run(()=>useForVerify());
 $("restore-stego").onclick=run(()=>{useForVerify(); $("tamper-status").textContent="Restored the original stego output.";});
-$("received-file").addEventListener("change",()=>{state.received=$("received-file").files[0]; preview("received-preview",state.received,undefined,false); $("verdict-card").hidden=true;});
+$("received-file").addEventListener("change",()=>{state.received=$("received-file").files[0]; setDepthOptions("verify-lsb",kindOf(state.received)); preview("received-preview",state.received,undefined,false); $("verdict-card").hidden=true;});
 $("use-public").onclick=()=>{const key=selectedKey();if(key){$("verify-public").value=key.public_key_pem;invalidateVerification();notice("Selected demo public key loaded: "+key.fingerprint.slice(0,16)+"…");}};
 $("public-file").onchange=run(async()=>{if($("public-file").files[0]){$("verify-public").value=await $("public-file").files[0].text();invalidateVerification();}});
 $("decoy-public").onclick=run(async()=>{$("verify-public").value=(await api("/api/keys/decoy",new FormData())).public_key_pem;invalidateVerification();notice("Wrong public key loaded for a negative verification case.");});

@@ -246,6 +246,49 @@ def test_video_cover_outputs_playable_mp4_and_compare_offers_listening(keys):
         assert base64.b64decode(listen[name])[:4] == b"RIFF"
 
 
+@pytest.mark.parametrize("width", [2, 4])
+@pytest.mark.parametrize("depth", [9, 12, 15, 16])
+def test_audio_allows_up_to_16_lsbs(width, depth, keys):
+    args = encode_args("audio", wav(width=width), num_lsb=depth)
+    enc = pipeline.encode(**args)
+    assert pipeline.decode(**decode_args(args, enc.stego_bytes, keys)).verdict == "Authentic"
+    info = pipeline.prepare("audio", wav(width=width), b"Hello Bob", num_lsb=depth)
+    assert [c["num_lsb"] for c in info["choices"]] == list(range(1, 17))
+
+
+def test_video_at_16_lsbs_decrypts_and_detects_tampering(keys):
+    video = (Path(__file__).resolve().parents[1] / "samples" / "cover_video.mp4").read_bytes()
+    client = app.test_client()
+    form = {"cover_type":"video", "num_lsb":"16", "start_mode":"manual", "manual_offset":"100"}
+    enc = client.post("/api/encode", data=form | {"payload_type":"text", "payload_text":"Hello Bob",
+                                                  "cover_file":(io.BytesIO(video),"cover.mp4")})
+    assert enc.status_code == 200, enc.json
+    stego = base64.b64decode(enc.json["stego_base64"])
+    verify = lambda blob, **changes: client.post("/api/decode", data=form | changes | {
+        "public_key_pem":keys.decode(), "stego_file":(io.BytesIO(blob),"stego_video.mp4")}).json
+    result = verify(stego)
+    assert (result["verdict"], result["evidence"]["decryption_status"]) == ("Authentic", "Passed")
+    assert base64.b64decode(result["data_base64"]) == b"Hello Bob"
+    assert verify(stego, num_lsb="15")["verdict"] != "Authentic"
+
+    tampered = client.post("/api/demo/tamper", data=form | {"tamper_mode":"payload",
+                                                            "stego_file":(io.BytesIO(stego),"stego_video.mp4")})
+    assert tampered.status_code == 200, tampered.json
+    result = verify(base64.b64decode(tampered.json["stego_base64"]))
+    assert (result["verdict"], result["evidence"]["reason_code"], result["data_base64"]) == ("Cannot Verify", "DECRYPTION_FAILED", None)
+    # At full depth no sample bits are left for the stable cover hash to protect.
+    assert client.post("/api/demo/tamper", data=form | {"tamper_mode":"cover",
+        "stego_file":(io.BytesIO(stego),"stego_video.mp4")}).status_code == 400
+
+
+def test_depth_limits_follow_the_carrier(covers, keys):
+    with pytest.raises(ValueError, match="between 1 and 8"):
+        pipeline.encode(**encode_args("image", covers["image"], num_lsb=9))
+    with pytest.raises(ValueError, match="between 1 and 16"):
+        pipeline.encode(**encode_args("audio", covers["audio"], num_lsb=17))
+    assert len(pipeline.prepare("image", covers["image"], b"Hi")["choices"]) == 8
+
+
 def test_audio_32_bit(covers, keys):
     args = encode_args("audio", wav(width=4), num_lsb=8, hash_algorithm="SHA-512")
     enc = pipeline.encode(**args)

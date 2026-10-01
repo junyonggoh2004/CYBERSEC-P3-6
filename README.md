@@ -17,7 +17,7 @@ Open **http://127.0.0.1:5000**. Keep the terminal running. This is a local assig
 
 ## Pages and user journey
 
-1. **Protect — Alice:** select or drag in the original PNG, WAV or video, choose hidden content, select SHA-256 (default) or SHA-512, select Alice's signing pair, choose 1–8 lowest bits and a manual or passphrase-derived start location.
+1. **Protect — Alice:** select or drag in the original PNG, WAV or video, choose hidden content, select SHA-256 (default) or SHA-512, select Alice's signing pair, choose the lowest bits (1–8 for images, 1–16 for audio and video) and a manual or passphrase-derived start location.
 2. Review exact capacity and the draft verification record. The app includes metadata, signature, header and field-padding overhead. It shows each depth's
 capacity and the minimum sufficient depth without changing the user's choice.
 3. Sign and create the stego object. Inspect/download the result and its final record. The draft nonce/timestamp are regenerated for the final file.
@@ -123,7 +123,7 @@ A simple educational GUI prototype that hides and extracts UTF-8 text in:
 - PNG images
 - uncompressed PCM WAV audio
 
-It supports selectable 1–8 LSBs and a user-selected start carrier index.
+It supports selectable 1–8 LSBs (1–16 for audio and video covers) and a user-selected start carrier index.
 
 ## Install and run
 
@@ -134,7 +134,7 @@ python steg_app.py
 
 ## Encode flow
 1. Select a PNG or PCM WAV file.
-2. Choose the number of LSBs (1–8).
+2. Choose the number of LSBs (1–8 for images, 1–16 for audio and video; above 8 the hidden data becomes audible).
 3. Choose the start carrier index.
 4. Type the hidden text.
 5. Click **Encode → Save Stego File**.

@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from stego import analysis, audio_analysis, audio_metrics, comparison, crypto_utils, jobs, pipeline  # noqa: E402
 from cryptography.hazmat.primitives import serialization
 from stego import audio_lsb, image_lsb, payload, media_input, encryption, video_lsb, listening
-from stego.bitstream import StegoStream
+from stego.bitstream import StegoStream, low_bits
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
@@ -318,7 +318,10 @@ def api_demo_tamper():
         elif operation == "cover":
             if kind == "image" and depth == 8:
                 raise ValueError("All eight image-channel bits are excluded from the stable hash. Use depth 1-7 for this cover-integrity demonstration.")
-            carrier.array[0] ^= 1 << depth
+            if depth >= carrier.array.dtype.itemsize * 8:
+                raise ValueError("Every sample bit is excluded from the stable hash at this depth. Use fewer LSBs for this cover-integrity demonstration.")
+            unsigned, _ = low_bits(carrier.array, depth)
+            unsigned[0] ^= 1 << depth
             detail = "Changed a protected cover bit in a copy. Manual extraction can show a cover-hash mismatch; a cover-derived location may instead become unreadable."
         else:
             raise ValueError("Choose payload or cover tampering.")

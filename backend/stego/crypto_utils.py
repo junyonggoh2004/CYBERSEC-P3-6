@@ -26,6 +26,8 @@ import numpy as np
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
+from .bitstream import low_bits
+
 KEY_DIR = Path(__file__).resolve().parent.parent / "keys"
 PRIVATE_KEY_PATH = KEY_DIR / "private_key.pem"
 PUBLIC_KEY_PATH = KEY_DIR / "public_key.pem"
@@ -46,12 +48,9 @@ def digest(data: bytes, algorithm="SHA-256") -> bytes:
 
 
 def stable_cover_hash(carrier: np.ndarray, num_lsb: int, algorithm="SHA-256", context=None) -> bytes:
-    # Invert a small positive, already-typed value rather than casting a
-    # negative Python int into an unsigned dtype (numpy >= 2 raises
-    # OverflowError on the latter).
-    keep_mask = np.array((1 << num_lsb) - 1, dtype=carrier.dtype)
-    clear_mask = ~keep_mask
-    masked = carrier & clear_mask
+    # Unsigned view: a 16-bit mask does not fit a signed int16 sample.
+    unsigned, keep_mask = low_bits(carrier, num_lsb)
+    masked = unsigned & ~keep_mask
     prefix = json.dumps(context, sort_keys=True, separators=(",", ":")).encode() if context else b""
     return digest(prefix + masked.tobytes(), algorithm)
 

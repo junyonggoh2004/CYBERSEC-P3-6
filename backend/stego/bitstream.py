@@ -15,14 +15,31 @@ from __future__ import annotations
 import numpy as np
 
 MIN_LSB = 1
-MAX_LSB = 8
+MAX_LSB = 16  # PCM samples; an 8-bit image-channel value allows at most 8
 
 
-def validate_num_lsb(num_lsb: int) -> int:
+def max_lsb(carrier: np.ndarray) -> int:
+    """Deepest setting a carrier allows: 8 for image values, 16 for PCM samples."""
+    return min(MAX_LSB, carrier.dtype.itemsize * 8)
+
+
+def validate_num_lsb(num_lsb: int, carrier: np.ndarray | None = None) -> int:
     num_lsb = int(num_lsb)
-    if not (MIN_LSB <= num_lsb <= MAX_LSB):
-        raise ValueError(f"num_lsb must be between {MIN_LSB} and {MAX_LSB} (got {num_lsb}).")
+    limit = MAX_LSB if carrier is None else max_lsb(carrier)
+    if not (MIN_LSB <= num_lsb <= limit):
+        raise ValueError(f"num_lsb must be between {MIN_LSB} and {limit} for this cover (got {num_lsb}).")
     return num_lsb
+
+
+def low_bits(carrier: np.ndarray, num_lsb: int) -> tuple[np.ndarray, np.ndarray]:
+    """(unsigned view of carrier, mask of its low num_lsb bits).
+
+    Masks are built on the unsigned view because at full depth they don't fit
+    the signed sample type (65,535 is not an int16); the bit patterns, and so
+    the embedded samples, are identical either way.
+    """
+    unsigned = carrier.view(carrier.dtype.str.replace("i", "u"))
+    return unsigned, np.array((1 << num_lsb) - 1, dtype=unsigned.dtype)
 
 
 def bytes_to_bits(data: bytes) -> np.ndarray:
@@ -52,7 +69,7 @@ def capacity_bytes(carrier: np.ndarray, start_index: int, num_lsb: int) -> int:
 
 def embed_bits(carrier: np.ndarray, start_index: int, num_lsb: int, bits: np.ndarray) -> None:
     """Embed `bits` (0/1 array) into carrier in-place, starting at start_index."""
-    num_lsb = validate_num_lsb(num_lsb)
+    num_lsb = validate_num_lsb(num_lsb, carrier)
     n_bits = len(bits)
     if n_bits == 0:
         return
@@ -69,20 +86,14 @@ def embed_bits(carrier: np.ndarray, start_index: int, num_lsb: int, bits: np.nda
     weights = 1 << np.arange(num_lsb - 1, -1, -1)
     values = grouped.astype(np.int64).dot(weights)
 
-    seg = carrier[start_index:start_index + n_units]
-    dtype = seg.dtype
-    # Build the "clear low num_lsb bits" mask by inverting a small positive,
-    # already-typed value rather than casting a negative Python int into an
-    # unsigned dtype (numpy >= 2 raises OverflowError on the latter).
-    keep_mask = np.array((1 << num_lsb) - 1, dtype=dtype)
-    clear_mask = ~keep_mask
-    set_values = values.astype(dtype)
-    seg &= clear_mask
-    seg |= set_values
+    unsigned, keep_mask = low_bits(carrier, num_lsb)
+    seg = unsigned[start_index:start_index + n_units]  # a view: writes reach the carrier
+    seg &= ~keep_mask
+    seg |= values.astype(seg.dtype)
 
 
 def extract_bits(carrier: np.ndarray, start_index: int, num_lsb: int, n_bits: int) -> np.ndarray:
-    num_lsb = validate_num_lsb(num_lsb)
+    num_lsb = validate_num_lsb(num_lsb, carrier)
     if n_bits == 0:
         return np.zeros(0, dtype=np.uint8)
     n_units = (n_bits + num_lsb - 1) // num_lsb
@@ -91,9 +102,8 @@ def extract_bits(carrier: np.ndarray, start_index: int, num_lsb: int, n_bits: in
             f"Not enough data from the selected start location: need {n_units} carrier "
             f"units, only {capacity_units(carrier, start_index)} available."
         )
-    seg = carrier[start_index:start_index + n_units]
-    read_mask = np.array((1 << num_lsb) - 1, dtype=seg.dtype)
-    vals = (seg & read_mask).astype(np.int64)
+    unsigned, read_mask = low_bits(carrier, num_lsb)
+    vals = (unsigned[start_index:start_index + n_units] & read_mask).astype(np.int64)
     weights = np.arange(num_lsb - 1, -1, -1)
     bits = ((vals[:, None] >> weights) & 1).astype(np.uint8).reshape(-1)
     return bits[:n_bits]
@@ -109,7 +119,7 @@ class StegoStream:
     def __init__(self, carrier: np.ndarray, start_index: int, num_lsb: int):
         self.carrier = carrier
         self.start_index = int(start_index)
-        self.num_lsb = validate_num_lsb(num_lsb)
+        self.num_lsb = validate_num_lsb(num_lsb, carrier)
         self.pos_units = 0  # advances as we read/write, measured in carrier units
 
     def capacity_bytes(self) -> int:
